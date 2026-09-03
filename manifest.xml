@@ -6,6 +6,6 @@
   <Description>Control and synchronize the Arturia KeyLab mk3 with Renoise.</Description>
   <Author>foma</Author>
   <Category>MIDI,Control,Hardware</Category>
-  <Discussion>nah</Discussion>
-  <ApiVersion>5</ApiVersion>
+  <Discussion>https://github.com/fomalsd/keylab3-renoise</Discussion>
+  <ApiVersion>6</ApiVersion>
 </RenoiseScriptingTool>
