@@ -14,6 +14,8 @@
 renoise.tool().preferences = renoise.Document.create("AkmPreferences") {
   essential_setup_shown=false,
   default_device_index=5 --5 = "KeyLab Essential 61 mk3 (DAW)"
+  ,saved_in_device=""
+  ,saved_out_device=""
 }
 
 AKM_MAIN_DIALOG=nil
@@ -64,6 +66,67 @@ local AKM_INS_REPEAT={30,300,true,true}
 local AKM_VPD_VALUES={111, 127,64,0, 127}
 local AKM_VAL_LOCK={true,true,true,true,true,true,true,true,true}
 
+local function akm_trim_device_name(value)
+  if (value == nil) then return "" end
+  value=tostring(value)
+  value=value:gsub("^%s+", "")
+  value=value:gsub("%s+$", "")
+  return value
+end
+
+local function akm_normalize_device_name(value)
+  local normalized=akm_trim_device_name(value)
+  normalized=normalized:lower()
+  normalized=normalized:gsub("%s+", " ")
+  return normalized
+end
+
+local function akm_find_device_by_name(device_list, wanted_name)
+  local wanted=akm_normalize_device_name(wanted_name)
+  if (wanted=="") then return nil, nil end
+
+  for index=1,#device_list do
+    local candidate=akm_trim_device_name(device_list[index])
+    if (akm_normalize_device_name(candidate)==wanted) then
+      return candidate, index
+    end
+  end
+
+  for index=1,#device_list do
+    local candidate=akm_trim_device_name(device_list[index])
+    if (string.find(akm_normalize_device_name(candidate), wanted, 1, true)) then
+      return candidate, index
+    end
+  end
+
+  return nil, nil
+end
+
+local function akm_validate_device_name(device_name, device_list)
+  if (device_name == nil) then return nil end
+  local trimmed=akm_trim_device_name(device_name)
+  if (trimmed=="") then return nil end
+
+  if (device_list ~= nil) then
+    local found_name = akm_find_device_by_name(device_list, trimmed)
+    if (found_name ~= nil) then
+      local exact_name=akm_trim_device_name(found_name)
+      if (exact_name ~= "") then return exact_name end
+    end
+  end
+
+  return nil
+end
+
+local function akm_store_selected_devices()
+  if (vws.AKM_PP_DEVICE_IN and vws.AKM_PP_DEVICE_IN.value and AKM_INPUTS[vws.AKM_PP_DEVICE_IN.value]) then
+    renoise.tool().preferences.saved_in_device.value=akm_trim_device_name(AKM_INPUTS[vws.AKM_PP_DEVICE_IN.value])
+  end
+  if (vws.AKM_PP_DEVICE_OUT and vws.AKM_PP_DEVICE_OUT.value and AKM_OUTPUTS[vws.AKM_PP_DEVICE_OUT.value]) then
+    renoise.tool().preferences.saved_out_device.value=akm_trim_device_name(AKM_OUTPUTS[vws.AKM_PP_DEVICE_OUT.value])
+  end
+end
+
 local AKM_AUTOSTART=true
 local AKM_HIDE_ON_START=true
 local AKM_REMAP_PADS=true
@@ -84,7 +147,7 @@ local function akm_capture_clr_mrk()
 
   --Config.xml path:
     --Windows: %appdata%\Renoise\V3.1.1\Config.xml
-    --MacOS: ~/Library/Logs/,~/Library/Preferences/Renoise/V3.1.1/Config.xml
+    --MacOS: ~/Library/Preferences/Renoise/V3.1.1/Config.xml
     --Linux: ~/.renoise/V3.1.1/Config.xml
 
   local filename=""
@@ -364,7 +427,7 @@ local AKM_EFF={"00","0A","0U","0D","0G","0V","0I","0O","0T","0C","0S","0B","0E",
 --sfx/fx value convert tostring
 local function akm_sfx_fx_tostring(val) --number return a string
   local AKM_SFX_0={"EMP","A","U","D","G","V","I","O","T","C","S","B","E","N"}
-  local AKM_EFF_0={"EMP","A","U","D","G","V","I","O","T","C","S","B","E","N", "M","Z","Q","Y","R", "L","P","W","X","J", "ZT","ZL","ZK","ZG","ZB","ZD"}
+  local AKM_EFF_0={"EMP","A","U","D","G","V","I","O","T","C","S","B","E","N", "M","Z","Q","Y","R", "L","P","W","X","0J", "ZT","ZL","ZK","ZG","ZB","ZD"}
   local snc,sec=song.selected_note_column,song.selected_effect_column
   if (song.selected_track.type~=renoise.Track.TRACK_TYPE_MASTER) then
     if (snc) then
@@ -626,7 +689,7 @@ local function akm_pad4()
 end
 
 local function akm_pad5() -- Select Previous Sequence Pos
-  -- local t = renoise.song().transport
+  --
   -- t.playback_pos = renoise.SongPos(math.max(1, t.playback_pos.sequence - 1), 1)
 end
 
@@ -1009,7 +1072,7 @@ local function akm_left_dial()
   local mfm=renoise.ApplicationWindow.MIDDLE_FRAME_MIXER
   local mfi1=renoise.ApplicationWindow.MIDDLE_FRAME_INSTRUMENT_PHRASE_EDITOR
   local mfi2=renoise.ApplicationWindow.MIDDLE_FRAME_INSTRUMENT_SAMPLE_KEYZONES
-  local mfi3=renoise.ApplicationWindow.MIDDLE_FRAME_INSTRUMENT_SAMPLE_EDITOR
+  local mfi3
   local mfi4=renoise.ApplicationWindow.MIDDLE_FRAME_INSTRUMENT_SAMPLE_MODULATION
   local mfi5=renoise.ApplicationWindow.MIDDLE_FRAME_INSTRUMENT_SAMPLE_EFFECTS
   local mfi6=renoise.ApplicationWindow.MIDDLE_FRAME_INSTRUMENT_PLUGIN_EDITOR
@@ -1059,9 +1122,6 @@ local function akm_left_dial()
     elseif (AKM_WINDOW_FRAME==mfi3) then
       AKM_WINDOW_FRAME=mfi2 
       vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[40]
-    elseif (AKM_WINDOW_FRAME==mfi2) then
-      AKM_WINDOW_FRAME=mfi1
-      vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[39]
     elseif (AKM_WINDOW_FRAME==mfi1) then
       AKM_WINDOW_FRAME=mfi7
       vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[45]
@@ -1511,41 +1571,48 @@ end
 
 
 
---5 knob for delay
-local function akm_nc_visible_delay()
-  local sst=song.selected_track
-  if not (sst.delay_column_visible) then
-    sst.delay_column_visible=true
+--delay convert tostring
+local function akm_delay_tostring(val) --number return a string, range val: 1 to 255 & 0
+  if (val<=255 and val>0) then
+    return ("%.2X"):format(val)
+  elseif (val==0) then
+    return "EMP"
   end
 end
 
-local function akm_nc_previous_delay()
-  if (song.transport.edit_mode and AKM_VAL_LOCK[5]) then
-    local snc=song.selected_note_column
-    if (snc) then
-      if (snc.delay_value>0) then
-        snc.delay_value=snc.delay_value-1
-      end
-      akm_nc_visible_delay()
-      vws.AKM_RTY_5.value=snc.delay_value
-      akm_mnt_vpd(snc.volume_value,snc.panning_value,snc.delay_value)
-    end
-  end
-end
-local function akm_nc_next_delay()
-  if (song.transport.edit_mode and AKM_VAL_LOCK[5]) then
-    local snc=song.selected_note_column
-    if (snc) then
-      if (snc.delay_value<255) then
-        snc.delay_value=snc.delay_value+1
-      end
-      akm_nc_visible_delay(select)
-      vws.AKM_RTY_5.value=snc.delay_value
-      akm_mnt_vpd(snc.volume_value,snc.panning_value,snc.delay_value)
+--delay convert tonumber
+local function akm_delay_tonumber(val) --string return a number
+  local vol_empty={"em","Em","eM","emp","eMp","emP","eMP","Emp","EMp","EMP","empty","Empty","EMPTY"}
+  for i=1,#vol_empty do
+    if (val==("%s"):format(vol_empty[i])) then
+      return 0
+    else
+      return tonumber(val,16)
     end
   end
 end
 
+
+
+--5 fader --> (delay value)
+local function akm_nc_delay_val(val,lvl)
+  if (AKM_VAL_LOCK[5]) then
+    if (song.transport.edit_mode) then
+      local snc=song.selected_note_column
+      if (snc) then
+        snc.delay_value=val
+        akm_nc_visible_delay()
+        akm_mnt_vpd(snc.volume_value,snc.panning_value,snc.delay_value)
+      end
+    end
+    if (lvl==1) then vws.AKM_SLD_5.value=vws.AKM_SLD_5.max
+    elseif (lvl==2) then vws.AKM_SLD_5.value=vws.AKM_SLD_5.max/4*3
+    elseif (lvl==3) then vws.AKM_SLD_5.value=vws.AKM_SLD_5.max/2 
+    elseif (lvl==4) then vws.AKM_SLD_5.value=vws.AKM_SLD_5.max/4
+    elseif (lvl==5) then vws.AKM_SLD_5.value=vws.AKM_SLD_5.min
+    end
+  end
+end
 
 --6 knob for sfx-fx
 local function akm_nc_visible_sfx()
@@ -1605,6 +1672,7 @@ local function akm_next_fx_val()
           vws.AKM_RTY_6.value=val
           vws.AKM_TXT_DIGITAL_2.text=("sFX: %s%.2X"):format(string.sub(snc.effect_number_string,2),snc.effect_amount_value)
           break
+
         end
       end
       akm_nc_visible_sfx()
@@ -1667,6 +1735,9 @@ local function akm_next_fx_amo()
       vws.AKM_TXT_DIGITAL_2.text=("sFX: %s%.2X"):format(string.sub(snc.effect_number_string,2),snc.effect_amount_value)
       akm_nc_visible_sfx()
     end
+   
+   
+   
     if (sec) then
       if (sec.amount_value<255) then
         sec.amount_value=sec.amount_value+1
@@ -1849,7 +1920,7 @@ local function akm_step_length(value)
 end
 
 
---- ---faders (8+1 faders)
+--- ---faders (8+1 rotary knobs)
 --1 fader --> (note value)
 local function akm_nc_note_val(val,lvl)
   if (AKM_VAL_LOCK[1]) then
@@ -1868,8 +1939,7 @@ local function akm_nc_note_val(val,lvl)
     if (lvl==1) then vws.AKM_SLD_1.value=vws.AKM_SLD_1.max
     elseif (lvl==2) then vws.AKM_SLD_1.value=vws.AKM_SLD_1.max/4*3
     elseif (lvl==3) then vws.AKM_SLD_1.value=vws.AKM_SLD_1.max/2 
-    elseif (lvl==4) then vws.AKM_SLD_1.value=vws.AKM_SLD_1.max/4
-    elseif (lvl==5) then vws.AKM_SLD_1.value=vws.AKM_SLD_1.min
+    elseif (lvl==4) then vws.AKM_SLD_1.value=vws.AKM_SLD_1.max
     end
   end
 end
@@ -2117,9 +2187,23 @@ local function akm_output_midi(out_device_name)
   if not table.is_empty(AKM_OUTPUTS) then
     if not out_device_name then
       return
-    else
-      AKM_MIDI_DEVICE_OUT=renoise.Midi.create_output_device(out_device_name)
-    end 
+    end
+    local valid_name=akm_validate_device_name(out_device_name, AKM_OUTPUTS)
+    if not valid_name then
+      if (AKM_MIDI_DEVICE_OUT and AKM_MIDI_DEVICE_OUT.is_open) then
+        AKM_MIDI_DEVICE_OUT:close()
+      end
+      AKM_MIDI_DEVICE_OUT=nil
+      return
+    end
+    if (AKM_MIDI_DEVICE_OUT and AKM_MIDI_DEVICE_OUT.is_open and AKM_MIDI_DEVICE_OUT.name==valid_name) then
+      return
+    end
+    if (AKM_MIDI_DEVICE_OUT and AKM_MIDI_DEVICE_OUT.is_open) then
+      AKM_MIDI_DEVICE_OUT:close()
+      AKM_MIDI_DEVICE_OUT=nil
+    end
+    AKM_MIDI_DEVICE_OUT=renoise.Midi.create_output_device(valid_name)
   end
 end
 
@@ -2202,7 +2286,6 @@ local akm_tbl_rules={
   
   {{0x90,0x2E,0x7F}, "bank_previous_on"},
   {{0x90,0x2E,0x00}, "bank_previous_off"},
-
   
   --filter/select buttons
   {{0x90,0x18,0x7F}, "select_btn1_on"},
@@ -2317,12 +2400,6 @@ local function akm_fun_gen(rule)
 
   if (rule=="redo_on") then vws.AKM_BTT_DAW_A_8.color=AKM_CLR.MARKER return end
   if (rule=="redo_off") then vws.AKM_BTT_DAW_A_8.color=AKM_CLR.DEFAULT return akm_out() end
-  
-  if (rule=="rewind_on") then vws.AKM_BTT_DAW_B_1.color=AKM_CLR.MARKER return akm_rewind_repeat() end
-  if (rule=="rewind_off") then vws.AKM_BTT_DAW_B_1.color=AKM_CLR.DEFAULT return akm_rewind_repeat(true) end
-
-  if (rule=="forward_on") then vws.AKM_BTT_DAW_B_2.color=AKM_CLR.MARKER return akm_forward_repeat() end
-  if (rule=="forward_off") then vws.AKM_BTT_DAW_B_2.color=AKM_CLR.DEFAULT return akm_forward_repeat(true) end
 
   if (rule=="stop_on") then vws.AKM_BTT_DAW_B_3.color=AKM_CLR.MARKER AKM_STOP_STATUS=true return akm_stop() end
   if (rule=="stop_off") then vws.AKM_BTT_DAW_B_3.color=AKM_CLR.DEFAULT AKM_STOP_STATUS=false end
@@ -2362,210 +2439,202 @@ local AKM_MIDI_DEVICE_IN=nil
 
 local function akm_input_midi(in_device_name)
   if not table.is_empty(AKM_INPUTS) then
-    if (in_device_name==nil) then
+    local valid_name=akm_validate_device_name(in_device_name, AKM_INPUTS)
+    if (in_device_name==nil or valid_name==nil) then
       if (AKM_MIDI_DEVICE_IN and AKM_MIDI_DEVICE_IN.is_open) then AKM_MIDI_DEVICE_IN:close() end
+      AKM_MIDI_DEVICE_IN=nil
       return
-    else
-      local akm_knob_last = {}
-      local function midi_callback(message)
-        assert(#message==3)
-        assert(message[1]>=00 and message[1]<=0xFF)
-        assert(message[2]>=00 and message[2]<=0xFF)
-        assert(message[3]>=00 and message[3]<=0xFF)
-        print(("%X %X %X || %s"):format(message[1],message[2],message[3],in_device_name))
-        
-        --- ---pressed & released (led)
-        for r=1,#akm_tbl_rules do
-          local rule=akm_tbl_rules[r][1]
-          if (message[1]==rule[1] and message[2]==rule[2] and message[3]==rule[3]) then
-            --print(tbl_rules[r][2])
-            return akm_fun_rules(r)
-          end          
-        end
-        
-        --- ---invoke commands
-        --pads (Essential mk3: note = 39+pad# on bank A, 47+pad# on bank B)
-        if (message[1]==0x99 and message[2]==40) then return akm_pad1() end
-        if (message[1]==0x99 and message[2]==41) then return akm_pad2() end
-        if (message[1]==0x99 and message[2]==42) then return akm_pad3() end
-        if (message[1]==0x99 and message[2]==43) then return akm_pad4() end
-        if (message[1]==0x99 and message[2]==44) then return akm_pad5() end
-        if (message[1]==0x99 and message[2]==45) then return akm_pad6() end
-        if (message[1]==0x99 and message[2]==46) then return akm_pad7() end
-        if (message[1]==0x99 and message[2]==47) then return akm_pad8() end
-        if (message[1]==0x99 and message[2]==48) then return akm_pad9() end
-        if (message[1]==0x99 and message[2]==49) then return akm_pad10() end
-        if (message[1]==0x99 and message[2]==50) then return akm_pad11() end
-        if (message[1]==0x99 and message[2]==51) then return akm_pad12() end
-
-        --play, record, loop (Essential mk3: plain CC, channel 1, 127=press/0=release)
-        if (message[1]==0xB0 and message[2]==21 and message[3]==0x00) then return akm_play() end
-        if (message[1]==0xB0 and message[2]==22 and message[3]==0x00) then return akm_edit_mode() end
-        if (message[1]==0xB0 and message[2]==24 and message[3]==0x00) then return akm_loop() end
-        
-        --metro, undo, redo
-        if (message[1]==0xB0 and message[2]==27 and message[3]==0x00) then return akm_metro() end
-        if (message[1]==0xB0 and message[2]==20 and message[3]==0x00) then return akm_stop() end
-        --Save button -> quick-save if the song already has a file, else prompt
-        if (message[1]==0xB0 and message[2]==40 and message[3]==0x00) then
-          if (song.file_name~=nil and song.file_name~="" and type(rna.save_song)=="function") then
-            rna:save_song()
-          else
-            akm_save_off()
-          end
-          return
-        end
-        if (message[1]==0xB0 and message[2]==25 and message[3]==0x00) then return akm_undo() end
-        if (message[1]==0xB0 and message[2]==26 and message[3]==0x00) then return akm_undo() end
-        --dedicated Undo/Redo buttons -> real Renoise undo/redo
-        if (message[1]==0xB0 and message[2]==42 and message[3]==0x00) then return akm_song_undo() end
-        if (message[1]==0xB0 and message[2]==43 and message[3]==0x00) then return akm_song_redo() end
-        
-        --browses center controls, dial (instruments navigator) - press=CC117, turn=CC116
-        if (message[1]==0xB0 and message[2]==117 and message[3]==0x7F) then vws.AKM_BMP_DIAL.visible=false return akm_button_dial_add_timer() end
-        if (message[1]==0xB0 and message[2]==117 and message[3]==0x00) then vws.AKM_BMP_DIAL.visible=true return akm_button_dial_remove_timer() end
-        if (message[1]==0xB0 and message[2]==116 and message[3]>=0x41) then return akm_left_dial() end
-        if (message[1]==0xB0 and message[2]==116 and message[3]<=0x40) then return akm_right_dial() end
-        
-        --Essential mk3 knobs send ABSOLUTE 0-127 values (CC 96-104), not relative turns.
-        --This tracks the last value per knob and derives a direction from it.
-        local function akm_knob_dir(cc, value, prev_fn, next_fn)
-          local last = akm_knob_last[cc]
-          akm_knob_last[cc] = value
-          if (last ~= nil and value > last) then return next_fn() end
-          if (last ~= nil and value < last) then return prev_fn() end
-        end
-        
-        --knob 1 note
-        if (message[1]==0xB0 and message[2]==96) then return akm_knob_dir(96,message[3],akm_nc_previous_note,akm_nc_next_note) end
-        
-        --knob 2 instrument
-        if (message[1]==0xB0 and message[2]==97) then return akm_knob_dir(97,message[3],akm_nc_previous_instrument,akm_nc_next_instrument) end
-        
-        --knob 3 volume
-        if (message[1]==0xB0 and message[2]==98) then return akm_knob_dir(98,message[3],akm_nc_previous_volume,akm_nc_next_volume) end
-        
-        --knob 4 panning
-        if (message[1]==0xB0 and message[2]==99) then return akm_knob_dir(99,message[3],akm_nc_previous_panning,akm_nc_next_panning) end
-        
-        --knob 5 delay
-        if (message[1]==0xB0 and message[2]==100) then return akm_knob_dir(100,message[3],akm_nc_previous_delay,akm_nc_next_delay) end
-        
-        --knob 6 sample fx
-        if (message[1]==0xB0 and message[2]==101) then return akm_knob_dir(101,message[3],akm_previous_fx_val,akm_next_fx_val) end
-        
-        --knob 7 effects
-        if (message[1]==0xB0 and message[2]==102) then return akm_knob_dir(102,message[3],akm_previous_fx_amo,akm_next_fx_amo) end
-
-        --knob 8 note columns navigation
-        if (message[1]==0xB0 and message[2]==103) then return akm_knob_dir(103,message[3],akm_previous_nc_ec,akm_next_nc_ec) end
-        
-        --knob 9 step length
-        if (message[1]==0xB0 and message[2]==104) then return akm_knob_dir(104,message[3],function() akm_step_length(1) end,function() akm_step_length(-1) end) end
-        
-        --fader 1 note
-        if (message[1]==0xB0 and message[2]==105 and message[2]<=0x7F and message[3]>=0x64) then return akm_nc_note_val(vws.AKM_VFD_VAL_1_1.value,1) end
-        if (message[1]==0xB0 and message[2]==105 and message[2]<=0x7F and message[3]<0x64 and message[3]>=0x4B) then return akm_nc_note_val(vws.AKM_VFD_VAL_1_2.value,2) end
-        if (message[1]==0xB0 and message[2]==105 and message[2]<=0x7F and message[3]<0x4B and message[3]>=0x32) then return akm_nc_note_val(vws.AKM_VFD_VAL_1_3.value,3) end
-        if (message[1]==0xB0 and message[2]==105 and message[2]<=0x7F and message[3]<0x32 and message[3]>=0x19) then return akm_nc_note_val(vws.AKM_VFD_VAL_1_4.value,4) end
-        if (message[1]==0xB0 and message[2]==105 and message[2]<=0x7F and message[3]<0x19) then return akm_nc_note_val(vws.AKM_VFD_VAL_1_5.value,5) end
-        
-        --fader 2 instrument
-        --if (message[1]==0xB0 and message[2]==106 and message[2]<=0x7F and message[3]>=0x40) then return akm_nc_instrument_val(song.selected_instrument_index-1) end
-        --if (message[1]==0xB0 and message[2]==106 and message[2]<=0x7F and message[3]<0x40) then return  akm_nc_instrument_val(255) end
-        if (message[1]==0xB0 and message[2]==106 and message[2]<=0x7F and message[3]>=0x64) then return akm_nc_instrument_val(vws.AKM_VFD_VAL_2_1.value,1) end
-        if (message[1]==0xB0 and message[2]==106 and message[2]<=0x7F and message[3]<0x64 and message[3]>=0x4B) then return akm_nc_instrument_val(vws.AKM_VFD_VAL_2_2.value,2) end
-        if (message[1]==0xB0 and message[2]==106 and message[2]<=0x7F and message[3]<0x4B and message[3]>=0x32) then return akm_nc_instrument_val(vws.AKM_VFD_VAL_2_3.value,3) end
-        if (message[1]==0xB0 and message[2]==106 and message[2]<=0x7F and message[3]<0x32 and message[3]>=0x19) then return akm_nc_instrument_val(vws.AKM_VFD_VAL_2_4.value,4) end
-        if (message[1]==0xB0 and message[2]==106 and message[2]<=0x7F and message[3]<0x19) then return akm_nc_instrument_val(vws.AKM_VFD_VAL_2_5.value,5) end
-        
-        --fader 3 volume
-        --if (message[1]==0xB0 and message[2]==107 and message[2]<=0x7F and message[3]>=0x40) then return akm_nc_volume_val(AKM_VPD_VALUES[1]) end
-        --if (message[1]==0xB0 and message[2]==107 and message[2]<=0x7F and message[3]<0x40) then return akm_nc_volume_val(255) end
-        if (message[1]==0xB0 and message[2]==107 and message[2]<=0x7F and message[3]>=0x64) then return akm_nc_volume_val(vws.AKM_VFD_VAL_3_1.value,1) end
-        if (message[1]==0xB0 and message[2]==107 and message[2]<=0x7F and message[3]<0x64 and message[3]>=0x4B) then return akm_nc_volume_val(vws.AKM_VFD_VAL_3_2.value,2) end
-        if (message[1]==0xB0 and message[2]==107 and message[2]<=0x7F and message[3]<0x4B and message[3]>=0x32) then return akm_nc_volume_val(vws.AKM_VFD_VAL_3_3.value,3) end
-        if (message[1]==0xB0 and message[2]==107 and message[2]<=0x7F and message[3]<0x32 and message[3]>=0x19) then return akm_nc_volume_val(vws.AKM_VFD_VAL_3_4.value,4) end
-        if (message[1]==0xB0 and message[2]==107 and message[2]<=0x7F and message[3]<0x19) then return akm_nc_volume_val(vws.AKM_VFD_VAL_3_5.value,5) end
-        
-        --fader 4 panning
-        --if (message[1]==0xB0 and message[2]==108 and message[2]<=0x7F and message[3]>=0x5F) then return akm_nc_panning_val(AKM_VPD_VALUES[2]) end
-        --if (message[1]==0xB0 and message[2]==108 and message[2]<=0x7F and message[3]<0x5F and message[3]>=0x3F) then return akm_nc_panning_val(AKM_VPD_VALUES[3]) end
-        --if (message[1]==0xB0 and message[2]==108 and message[2]<=0x7F and message[3]<0x3F and message[3]>=0x0F) then return akm_nc_panning_val(AKM_VPD_VALUES[4]) end
-        --if (message[1]==0xB0 and message[2]==108 and message[2]<=0x7F and message[3]<0x0F) then return akm_nc_panning_val(255) end
-        if (message[1]==0xB0 and message[2]==108 and message[2]<=0x7F and message[3]>=0x64) then return akm_nc_panning_val(vws.AKM_VFD_VAL_4_1.value,1) end
-        if (message[1]==0xB0 and message[2]==108 and message[2]<=0x7F and message[3]<0x64 and message[3]>=0x4B) then return akm_nc_panning_val(vws.AKM_VFD_VAL_4_2.value,2) end
-        if (message[1]==0xB0 and message[2]==108 and message[2]<=0x7F and message[3]<0x4B and message[3]>=0x32) then return akm_nc_panning_val(vws.AKM_VFD_VAL_4_3.value,3) end
-        if (message[1]==0xB0 and message[2]==108 and message[2]<=0x7F and message[3]<0x32 and message[3]>=0x19) then return akm_nc_panning_val(vws.AKM_VFD_VAL_4_4.value,4) end
-        if (message[1]==0xB0 and message[2]==108 and message[2]<=0x7F and message[3]<0x19) then return akm_nc_panning_val(vws.AKM_VFD_VAL_4_5.value,5) end
-        
-        --fader 5 delay
-        --if (message[1]==0xB0 and message[2]==109 and message[2]<=0x7F and message[3]>=0x40) then return akm_nc_delay_val(AKM_VPD_VALUES[5]) end
-        --if (message[1]==0xB0 and message[2]==109 and message[2]<=0x7F and message[3]<0x40) then return akm_nc_delay_val(0) end
-        if (message[1]==0xB0 and message[2]==109 and message[2]<=0x7F and message[3]>=0x64) then return akm_nc_delay_val(vws.AKM_VFD_VAL_5_1.value,1) end
-        if (message[1]==0xB0 and message[2]==109 and message[2]<=0x7F and message[3]<0x64 and message[3]>=0x4B) then return akm_nc_delay_val(vws.AKM_VFD_VAL_5_2.value,2) end
-        if (message[1]==0xB0 and message[2]==109 and message[2]<=0x7F and message[3]<0x4B and message[3]>=0x32) then return akm_nc_delay_val(vws.AKM_VFD_VAL_5_3.value,3) end
-        if (message[1]==0xB0 and message[2]==109 and message[2]<=0x7F and message[3]<0x32 and message[3]>=0x19) then return akm_nc_delay_val(vws.AKM_VFD_VAL_5_4.value,4) end
-        if (message[1]==0xB0 and message[2]==109 and message[2]<=0x7F and message[3]<0x19) then return akm_nc_delay_val(vws.AKM_VFD_VAL_5_5.value,5) end
-        
-        --fader 6 sfx/fx
-        if (message[1]==0xB0 and message[2]==110 and message[2]<=0x7F and message[3]>=0x64) then return akm_sfx_fx_val(vws.AKM_VFD_VAL_6_1.value,1) end
-        if (message[1]==0xB0 and message[2]==110 and message[2]<=0x7F and message[3]<0x64 and message[3]>=0x4B) then return akm_sfx_fx_val(vws.AKM_VFD_VAL_6_2.value,2) end
-        if (message[1]==0xB0 and message[2]==110 and message[2]<=0x7F and message[3]<0x4B and message[3]>=0x32) then return akm_sfx_fx_val(vws.AKM_VFD_VAL_6_3.value,3) end
-        if (message[1]==0xB0 and message[2]==110 and message[2]<=0x7F and message[3]<0x32 and message[3]>=0x19) then return akm_sfx_fx_val(vws.AKM_VFD_VAL_6_4.value,4) end
-        if (message[1]==0xB0 and message[2]==110 and message[2]<=0x7F and message[3]<0x19) then return akm_sfx_fx_val(vws.AKM_VFD_VAL_6_5.value,5) end
-
-        --fader 7 amount sfx/fx
-        if (message[1]==0xB0 and message[2]==111 and message[2]<=0x7F and message[3]>=0x64) then return akm_amount_val(vws.AKM_VFD_VAL_7_1.value,1) end
-        if (message[1]==0xB0 and message[2]==111 and message[2]<=0x7F and message[3]<0x64 and message[3]>=0x4B) then return akm_amount_val(vws.AKM_VFD_VAL_7_2.value,2) end
-        if (message[1]==0xB0 and message[2]==111 and message[2]<=0x7F and message[3]<0x4B and message[3]>=0x32) then return akm_amount_val(vws.AKM_VFD_VAL_7_3.value,3) end
-        if (message[1]==0xB0 and message[2]==111 and message[2]<=0x7F and message[3]<0x32 and message[3]>=0x19) then return akm_amount_val(vws.AKM_VFD_VAL_7_4.value,4) end
-        if (message[1]==0xB0 and message[2]==111 and message[2]<=0x7F and message[3]<0x19) then return akm_amount_val(vws.AKM_VFD_VAL_7_5.value,5) end
-                
-        --fader 8 note/effect column
-        if (message[1]==0xB0 and message[2]==112 and message[2]<=0x7F and message[3]>=0x64) then return akm_nc_ec_val(vws.AKM_VFD_VAL_8_1.value,1) end
-        if (message[1]==0xB0 and message[2]==112 and message[2]<=0x7F and message[3]<0x64 and message[3]>=0x4B) then return akm_nc_ec_val(vws.AKM_VFD_VAL_8_2.value,2) end
-        if (message[1]==0xB0 and message[2]==112 and message[2]<=0x7F and message[3]<0x4B and message[3]>=0x32) then return akm_nc_ec_val(vws.AKM_VFD_VAL_8_3.value,3) end
-        if (message[1]==0xB0 and message[2]==112 and message[2]<=0x7F and message[3]<0x32 and message[3]>=0x19) then return akm_nc_ec_val(vws.AKM_VFD_VAL_8_4.value,4) end
-        if (message[1]==0xB0 and message[2]==112 and message[2]<=0x7F and message[3]<0x19) then return akm_nc_ec_val(vws.AKM_VFD_VAL_8_5.value,5) end
-        
-        --fader 9 step length
-        if (message[1]==0xB0 and message[2]==113 and message[2]<=0x7F and message[3]>=0x64) then return akm_sq_step_val(vws.AKM_VFD_VAL_9_1.value,1) end
-        if (message[1]==0xB0 and message[2]==113 and message[2]<=0x7F and message[3]<0x64 and message[3]>=0x4B) then return akm_sq_step_val(vws.AKM_VFD_VAL_9_2.value,2) end
-        if (message[1]==0xB0 and message[2]==113 and message[2]<=0x7F and message[3]<0x4B and message[3]>=0x32) then return akm_sq_step_val(vws.AKM_VFD_VAL_9_3.value,3) end
-        if (message[1]==0xB0 and message[2]==113 and message[2]<=0x7F and message[3]<0x32 and message[3]>=0x19) then return akm_sq_step_val(vws.AKM_VFD_VAL_9_4.value,4) end
-        if (message[1]==0xB0 and message[2]==113 and message[2]<=0x7F and message[3]<0x19) then return akm_sq_step_val(vws.AKM_VFD_VAL_9_5.value,5) end
-        
-        
-        --text sysex
-        --if (message[1]==0xB0 and message[2]==0x74 and message[3]==0x7F) then print("Category") end
-        --if (message[1]==0xB0 and message[2]==0x75 and message[3]==0x7F) then print("Preset") end
-        --if (message[1]==0xB0 and message[2]==0x76 and message[3]==0x7F) then print("Analog Lab") end
-        --{0xF0,0x00,0x20,0x6B,0x7F,0x42,0x02,0x00,0x00,0x15,0x7F,0xF7}
-      end
-      -- note: sysex callback would be a optional 2nd arg...
-      if (AKM_MIDI_DEVICE_IN and AKM_MIDI_DEVICE_IN.is_open) then
-        return
-      else
-        AKM_MIDI_DEVICE_IN=renoise.Midi.create_input_device(in_device_name,midi_callback)
-      end
     end
+
+    local akm_knob_last = {}
+    local function midi_callback(message)
+      assert(#message==3)
+      assert(message[1]>=00 and message[1]<=0xFF)
+      assert(message[2]>=00 and message[2]<=0xFF)
+      assert(message[3]>=00 and message[3]<=0xFF)
+      print(("%X %X %X || %s"):format(message[1],message[2],message[3],valid_name))
+      
+      --- ---pressed & released (led)
+      for r=1,#akm_tbl_rules do
+        local rule=akm_tbl_rules[r][1]
+        if (message[1]==rule[1] and message[2]==rule[2] and message[3]==rule[3]) then
+          return akm_fun_rules(r)
+        end          
+      end
+      
+      --- ---invoke commands
+      --pads (Essential mk3: note = 39+pad# on bank A, 47+pad# on bank B)
+      if (message[1]==0x99 and message[2]==40) then return akm_pad1() end
+      if (message[1]==0x99 and message[2]==41) then return akm_pad2() end
+      if (message[1]==0x99 and message[2]==42) then return akm_pad3() end
+      if (message[1]==0x99 and message[2]==43) then return akm_pad4() end
+      if (message[1]==0x99 and message[2]==44) then return akm_pad5() end
+      if (message[1]==0x99 and message[2]==45) then return akm_pad6() end
+      if (message[1]==0x99 and message[2]==46) then return akm_pad7() end
+      if (message[1]==0x99 and message[2]==47) then return akm_pad8() end
+      if (message[1]==0x99 and message[2]==48) then return akm_pad9() end
+      if (message[1]==0x99 and message[2]==49) then return akm_pad10() end
+      if (message[1]==0x99 and message[2]==50) then return akm_pad11() end
+      if (message[1]==0x99 and message[2]==51) then return akm_pad12() end
+
+      --play, record, loop (Essential mk3: plain CC, channel 1, 127=press/0=release)
+      if (message[1]==0xB0 and message[2]==21 and message[3]==0x00) then return akm_play() end
+      if (message[1]==0xB0 and message[2]==22 and message[3]==0x00) then return akm_edit_mode() end
+      if (message[1]==0xB0 and message[2]==24 and message[3]==0x00) then return akm_loop() end
+      
+      --metro, undo, redo
+      if (message[1]==0xB0 and message[2]==27 and message[3]==0x00) then return akm_metro() end
+      if (message[1]==0xB0 and message[2]==20 and message[3]==0x00) then return akm_stop() end
+      --Save button -> quick-save if the song already has a file, else prompt
+      if (message[1]==0xB0 and message[2]==40 and message[3]==0x00) then
+        if (song.file_name~=nil and song.file_name~="" and type(rna.save_song)=="function") then
+          rna:save_song()
+        else
+          akm_save_off()
+        end
+        return
+      end
+      if (message[1]==0xB0 and message[2]==25 and message[3]==0x00) then return akm_undo() end
+      if (message[1]==0xB0 and message[2]==26 and message[3]==0x00) then return akm_undo() end
+      --dedicated Undo/Redo buttons -> real Renoise undo/redo
+      if (message[1]==0xB0 and message[2]==42 and message[3]==0x00) then return akm_song_undo() end
+      if (message[1]==0xB0 and message[2]==43 and message[3]==0x00) then return akm_song_redo() end
+      
+      --browses center controls, dial (instruments navigator) - press=CC117, turn=CC116
+      if (message[1]==0xB0 and message[2]==117 and message[3]==0x7F) then vws.AKM_BMP_DIAL.visible=false return akm_button_dial_add_timer() end
+      if (message[1]==0xB0 and message[2]==117 and message[3]==0x00) then vws.AKM_BMP_DIAL.visible=true return akm_button_dial_remove_timer() end
+      if (message[1]==0xB0 and message[2]==116 and message[3]>=0x41) then return akm_left_dial() end
+      if (message[1]==0xB0 and message[2]==116 and message[3]<=0x40) then return akm_right_dial() end
+      
+      --Essential mk3 knobs send ABSOLUTE 0-127 values (CC 96-104), not relative turns.
+      --This tracks the last value per knob and derives a direction from it.
+      local function akm_knob_dir(cc, value, prev_fn, next_fn)
+        local last = akm_knob_last[cc]
+        akm_knob_last[cc] = value
+        if (last ~= nil and value > last) then return next_fn() end
+        if (last ~= nil and value < last) then return prev_fn() end
+      end
+      
+      --knob 1 note
+      if (message[1]==0xB0 and message[2]==96) then return akm_knob_dir(96,message[3],akm_nc_previous_note,akm_nc_next_note) end
+      
+      --knob 2 instrument
+      if (message[1]==0xB0 and message[2]==97) then return akm_knob_dir(97,message[3],akm_nc_previous_instrument,akm_nc_next_instrument) end
+      
+      --knob 3 volume
+      if (message[1]==0xB0 and message[2]==98) then return akm_knob_dir(98,message[3],akm_nc_previous_volume,akm_nc_next_volume) end
+      
+      --knob 4 panning
+      if (message[1]==0xB0 and message[2]==99) then return akm_knob_dir(99,message[3],akm_nc_previous_panning,akm_nc_next_panning) end
+      
+      --knob 5 delay
+      if (message[1]==0xB0 and message[2]==100) then return akm_knob_dir(100,message[3],akm_nc_previous_delay,akm_nc_next_delay) end
+      
+      --knob 6 sample fx
+      if (message[1]==0xB0 and message[2]==101) then return akm_knob_dir(101,message[3],akm_previous_fx_val,akm_next_fx_val) end
+      
+      --knob 7 effects
+      if (message[1]==0xB0 and message[2]==102) then return akm_knob_dir(102,message[3],akm_previous_fx_amo,akm_next_fx_amo) end
+
+      --knob 8 note columns navigation
+      if (message[1]==0xB0 and message[2]==103) then return akm_knob_dir(103,message[3],akm_previous_nc_ec,akm_next_nc_ec) end
+      
+      --knob 9 step length
+      if (message[1]==0xB0 and message[2]==104) then return akm_knob_dir(104,message[3],function() akm_step_length(1) end,function() akm_step_length(-1) end) end
+      
+      --fader 1 note
+      if (message[1]==0xB0 and message[2]==105 and message[2]<=0x7F and message[3]>=0x64) then return akm_nc_note_val(vws.AKM_VFD_VAL_1_1.value,1) end
+      if (message[1]==0xB0 and message[2]==105 and message[2]<=0x7F and message[3]<0x64 and message[3]>=0x4B) then return akm_nc_note_val(vws.AKM_VFD_VAL_1_2.value,2) end
+      if (message[1]==0xB0 and message[2]==105 and message[2]<=0x7F and message[3]<0x4B and message[3]>=0x32) then return akm_nc_note_val(vws.AKM_VFD_VAL_1_3.value,3) end
+      if (message[1]==0xB0 and message[2]==105 and message[2]<=0x7F and message[3]<0x32 and message[3]>=0x19) then return akm_nc_note_val(vws.AKM_VFD_VAL_1_4.value,4) end
+      if (message[1]==0xB0 and message[2]==105 and message[2]<=0x7F and message[3]<0x19) then return akm_nc_note_val(vws.AKM_VFD_VAL_1_5.value,5) end
+      
+      --fader 2 instrument
+      --if (message[1]==0xB0 and message[2]==106 and message[2]<=0x7F and message[3]>=0x40) then return akm_nc_instrument_val(AKM_VPD_VALUES[1]) end
+      --if (message[1]==0xB0 and message[2]==106 and message[2]<=0x7F and message[3]<0x40) then return  akm_nc_instrument_val(255) end
+      if (message[1]==0xB0 and message[2]==106 and message[2]<=0x7F and message[3]>=0x64) then return akm_nc_instrument_val(vws.AKM_VFD_VAL_2_1.value,1) end
+      if (message[1]==0xB0 and message[2]==106 and message[2]<=0x7F and message[3]<0x64 and message[3]>=0x4B) then return akm_nc_instrument_val(vws.AKM_VFD_VAL_2_2.value,2) end
+      if (message[1]==0xB0 and message[2]==106 and message[2]<=0x7F and message[3]<0x4B and message[3]>=0x32) then return akm_nc_instrument_val(vws.AKM_VFD_VAL_2_3.value,3) end
+      if (message[1]==0xB0 and message[2]==106 and message[2]<=0x7F and message[3]<0x32 and message[3]>=0x19) then return akm_nc_instrument_val(vws.AKM_VFD_VAL_2_4.value,4) end
+      if (message[1]==0xB0 and message[2]==106 and message[2]<=0x7F and message[3]<0x19) then return akm_nc_instrument_val(vws.AKM_VFD_VAL_2_5.value,5) end
+      
+      --fader 3 volume
+      --if (message[1]==0xB0 and message[2]==107 and message[2]<=0x7F and message[3]>=0x40) then return akm_nc_volume_val(AKM_VPD_VALUES[1]) end
+      --if (message[1]==0xB0 and message[2]==107 and message[2]<=0x7F and message[3]<0x40) then return akm_nc_volume_val(255) end
+      if (message[1]==0xB0 and message[2]==107 and message[2]<=0x7F and message[3]>=0x64) then return akm_nc_volume_val(vws.AKM_VFD_VAL_3_1.value,1) end
+      if (message[1]==0xB0 and message[2]==107 and message[2]<=0x7F and message[3]<0x64 and message[3]>=0x4B) then return akm_nc_volume_val(vws.AKM_VFD_VAL_3_2.value,2) end
+      if (message[1]==0xB0 and message[2]==107 and message[2]<=0x7F and message[3]<0x4B and message[3]>=0x32) then return akm_nc_volume_val(vws.AKM_VFD_VAL_3_3.value,3) end
+      if (message[1]==0xB0 and message[2]==107 and message[2]<=0x7F and message[3]<0x32 and message[3]>=0x19) then return akm_nc_volume_val(vws.AKM_VFD_VAL_3_4.value,4) end
+      if (message[1]==0xB0 and message[2]==107 and message[2]<=0x7F and message[3]<0x19) then return akm_nc_volume_val(vws.AKM_VFD_VAL_3_5.value,5) end
+      
+      --fader 4 panning
+      --if (message[1]==0xB0 and message[2]==108 and message[2]<=0x7F and message[3]>=0x5F) then return akm_nc_panning_val(AKM_VPD_VALUES[2]) end
+      --if (message[1]==0xB0 and message[2]==108 and message[2]<=0x7F and message[3]<0x5F and message[3]>=0x3F) then return akm_nc_panning_val(AKM_VPD_VALUES[3]) end
+      --if (message[1]==0xB0 and message[2]==108 and message[2]<=0x7F and message[3]<0x3F and message[3]>=0x0F) then return akm_nc_panning_val(AKM_VPD_VALUES[4]) end
+      --if (message[1]==0xB0 and message[2]==108 and message[2]<=0x7F and message[3]<0x0F) then return akm_nc_panning_val(255) end
+      if (message[1]==0xB0 and message[2]==108 and message[2]<=0x7F and message[3]>=0x64) then return akm_nc_panning_val(vws.AKM_VFD_VAL_4_1.value,1) end
+      if (message[1]==0xB0 and message[2]==108 and message[2]<=0x7F and message[3]<0x64 and message[3]>=0x4B) then return akm_nc_panning_val(vws.AKM_VFD_VAL_4_2.value,2) end
+      if (message[1]==0xB0 and message[2]==108 and message[2]<=0x7F and message[3]<0x4B and message[3]>=0x32) then return akm_nc_panning_val(vws.AKM_VFD_VAL_4_3.value,3) end
+      if (message[1]==0xB0 and message[2]==108 and message[2]<=0x7F and message[3]<0x32 and message[3]>=0x19) then return akm_nc_panning_val(vws.AKM_VFD_VAL_4_4.value,4) end
+      if (message[1]==0xB0 and message[2]==108 and message[2]<=0x7F and message[3]<0x19) then return akm_nc_panning_val(vws.AKM_VFD_VAL_4_5.value,5) end
+      
+      --fader 5 delay
+      --if (message[1]==0xB0 and message[2]==109 and message[2]<=0x7F and message[3]>=0x40) then return akm_nc_delay_val(AKM_VPD_VALUES[5]) end
+      --if (message[1]==0xB0 and message[2]==109 and message[2]<=0x7F and message[3]<0x40) then return akm_nc_delay_val(0) end
+      if (message[1]==0xB0 and message[2]==109 and message[2]<=0x7F and message[3]>=0x64) then return akm_nc_delay_val(vws.AKM_VFD_VAL_5_1.value,1) end
+      if (message[1]==0xB0 and message[2]==109 and message[2]<=0x7F and message[3]<0x64 and message[3]>=0x4B) then return akm_nc_delay_val(vws.AKM_VFD_VAL_5_2.value,2) end
+      if (message[1]==0xB0 and message[2]==109 and message[2]<=0x7F and message[3]<0x4B and message[3]>=0x32) then return akm_nc_delay_val(vws.AKM_VFD_VAL_5_3.value,3) end
+      if (message[1]==0xB0 and message[2]==109 and message[2]<=0x7F and message[3]<0x32 and message[3]>=0x19) then return akm_nc_delay_val(vws.AKM_VFD_VAL_5_4.value,4) end
+      if (message[1]==0xB0 and message[2]==109 and message[2]<=0x7F and message[3]<0x19) then return akm_nc_delay_val(vws.AKM_VFD_VAL_5_5.value,5) end
+      
+      --fader 6 sfx/fx
+      if (message[1]==0xB0 and message[2]==110 and message[2]<=0x7F and message[3]>=0x64) then return akm_sfx_fx_val(vws.AKM_VFD_VAL_6_1.value,1) end
+      if (message[1]==0xB0 and message[2]==110 and message[2]<=0x7F and message[3]<0x64 and message[3]>=0x4B) then return akm_sfx_fx_val(vws.AKM_VFD_VAL_6_2.value,2) end
+      if (message[1]==0xB0 and message[2]==110 and message[2]<=0x7F and message[3]<0x4B and message[3]>=0x32) then return akm_sfx_fx_val(vws.AKM_VFD_VAL_6_3.value,3) end
+      if (message[1]==0xB0 and message[2]==110 and message[2]<=0x7F and message[3]<0x32 and message[3]>=0x19) then return akm_sfx_fx_val(vws.AKM_VFD_VAL_6_4.value,4) end
+      if (message[1]==0xB0 and message[2]==110 and message[2]<=0x7F and message[3]<0x19) then return akm_sfx_fx_val(vws.AKM_VFD_VAL_6_5.value,5) end
+
+      --fader 7 amount sfx/fx
+      if (message[1]==0xB0 and message[2]==111 and message[2]<=0x7F and message[3]>=0x64) then return akm_amount_val(vws.AKM_VFD_VAL_7_1.value,1) end
+      if (message[1]==0xB0 and message[2]==111 and message[2]<=0x7F and message[3]<0x64 and message[3]>=0x4B) then return akm_amount_val(vws.AKM_VFD_VAL_7_2.value,2) end
+      if (message[1]==0xB0 and message[2]==111 and message[2]<=0x7F and message[3]<0x4B and message[3]>=0x32) then return akm_amount_val(vws.AKM_VFD_VAL_7_3.value,3) end
+      if (message[1]==0xB0 and message[2]==111 and message[2]<=0x7F and message[3]<0x32 and message[3]>=0x19) then return akm_amount_val(vws.AKM_VFD_VAL_7_4.value,4) end
+      if (message[1]==0xB0 and message[2]==111 and message[2]<=0x7F and message[3]<0x19) then return akm_amount_val(vws.AKM_VFD_VAL_7_5.value,5) end
+              
+      --fader 8 note/effect column
+      if (message[1]==0xB0 and message[2]==112 and message[2]<=0x7F and message[3]>=0x64) then return akm_nc_ec_val(vws.AKM_VFD_VAL_8_1.value,1) end
+      if (message[1]==0xB0 and message[2]==112 and message[2]<=0x7F and message[3]<0x64 and message[3]>=0x4B) then return akm_nc_ec_val(vws.AKM_VFD_VAL_8_2.value,2) end
+      if (message[1]==0xB0 and message[2]==112 and message[2]<=0x7F and message[3]<0x4B and message[3]>=0x32) then return akm_nc_ec_val(vws.AKM_VFD_VAL_8_3.value,3) end
+      if (message[1]==0xB0 and message[2]==112 and message[2]<=0x7F and message[3]<0x32 and message[3]>=0x19) then return akm_nc_ec_val(vws.AKM_VFD_VAL_8_4.value,4) end
+      if (message[1]==0xB0 and message[2]==112 and message[2]<=0x7F and message[3]<0x19) then return akm_nc_ec_val(vws.AKM_VFD_VAL_8_5.value,5) end
+      
+      --fader 9 step length
+      if (message[1]==0xB0 and message[2]==113 and message[2]<=0x7F and message[3]>=0x64) then return akm_sq_step_val(vws.AKM_VFD_VAL_9_1.value,1) end
+      if (message[1]==0xB0 and message[2]==113 and message[2]<=0x7F and message[3]<0x64 and message[3]>=0x4B) then return akm_sq_step_val(vws.AKM_VFD_VAL_9_2.value,2) end
+      if (message[1]==0xB0 and message[2]==113 and message[2]<=0x7F and message[3]<0x4B and message[3]>=0x32) then return akm_sq_step_val(vws.AKM_VFD_VAL_9_3.value,3) end
+      if (message[1]==0xB0 and message[2]==113 and message[2]<=0x7F and message[3]<0x32 and message[3]>=0x19) then return akm_sq_step_val(vws.AKM_VFD_VAL_9_4.value,4) end
+      if (message[1]==0xB0 and message[2]==113 and message[2]<=0x7F and message[3]<0x19) then return akm_sq_step_val(vws.AKM_VFD_VAL_9_5.value,5) end
+      
+      
+      --text sysex
+      --if (message[1]==0xB0 and message[2]==0x74 and message[3]==0x7F) then print("Category") end
+      --if (message[1]==0xB0 and message[2]==0x75 and message[3]==0x7F) then print("Preset") end
+      --if (message[1]==0xB0 and message[2]==0x76 and message[3]==0x7F) then print("Analog Lab") end
+      --{0xF0,0x00,0x20,0x6B,0x7F,0x42,0x02,0x00,0x00,0x15,0x7F,0xF7}
+    end
+    if (AKM_MIDI_DEVICE_IN and AKM_MIDI_DEVICE_IN.is_open and AKM_MIDI_DEVICE_IN.name==valid_name) then
+      return
+    end
+    if (AKM_MIDI_DEVICE_IN and AKM_MIDI_DEVICE_IN.is_open) then
+      AKM_MIDI_DEVICE_IN:close()
+      AKM_MIDI_DEVICE_IN=nil
+    end
+    AKM_MIDI_DEVICE_IN=renoise.Midi.create_input_device(valid_name,midi_callback)
   end
-  -- stop dumping with 'AKM_MIDI_DEVICE_IN:close()' ...
 end
 
 
 local function akm_check_midi_on()
-  --AKM_INPUTS=renoise.Midi.available_input_devices()
-  for i=1,#renoise.Midi.available_input_devices() do
-    AKM_INPUTS[i]=(" %s"):format(renoise.Midi.available_input_devices()[i])
-    print("available_input_devices:",renoise.Midi.available_input_devices()[i]);
-  end
-  
-  
-  if not table.is_empty(AKM_INPUTS) then
-    vws.AKM_PP_DEVICE_IN.items=AKM_INPUTS
-  end
   local function show_mess()
     AKM_ON_OFF=true akm_on_off()
     if (vws.AKM_PP_DEVICE_NAME.value==1) then
@@ -2593,196 +2662,104 @@ local function akm_check_midi_on()
                             .."Do you have the \"KeyLab Essential 88 mk3\" MIDI controller\nconnected correctly?")
     end
   end
-  
-  if (AKM_LOCK_IO_DEVICES) then
-    --selecte default number of in device
-    local in_device_name=AKM_INPUTS[vws.AKM_PP_DEVICE_IN.value]
-    print("AKM dev_in:",vws.AKM_PP_DEVICE_IN.value,in_device_name)
-    AKM_ACTIVATE=true
-    akm_input_midi(string.sub(in_device_name,2))
-  else
-    --autoselect number of in device
-    if table.is_empty(AKM_INPUTS) then
-      return show_mess()
-    else
-      local status=true
-      if (vws.AKM_PP_DEVICE_NAME.value==1) then
-        for dev=1,#AKM_INPUTS do
-          if (AKM_INPUTS[dev]==" KeyLab 49 mk3 (DAW)") then
-            vws.AKM_PP_DEVICE_IN.value=dev
-            local in_device_name=AKM_INPUTS[dev]
-            print("AKM dev_in:",dev,in_device_name)
-            AKM_ACTIVATE=true
-            akm_input_midi(string.sub(in_device_name,2))
-            status=false
-            break
-          end
-        end
-      end
-      if (vws.AKM_PP_DEVICE_NAME.value==2) then
-        for dev=1,#AKM_INPUTS do
-          if (AKM_INPUTS[dev]==" KeyLab 61 mk3 (DAW)") then
-            vws.AKM_PP_DEVICE_IN.value=dev
-            local in_device_name=AKM_INPUTS[dev]
-            --print("AKM dev_in:",dev,in_device_name)
-            AKM_ACTIVATE=true
-            akm_input_midi(string.sub(in_device_name,2))
-            status=false
-            break
-          end
-        end
-      end
-      if (vws.AKM_PP_DEVICE_NAME.value==3) then
-        for dev=1,#AKM_INPUTS do
-          if (AKM_INPUTS[dev]==" KeyLab 88 mk3 (DAW)") then
-            vws.AKM_PP_DEVICE_IN.value=dev
-            local in_device_name=AKM_INPUTS[dev]
-            --print("AKM dev_in:",dev,in_device_name)
-            AKM_ACTIVATE=true
-            akm_input_midi(string.sub(in_device_name,2))
-            status=false
-            break
-          end
-        end
-      end
-      if (vws.AKM_PP_DEVICE_NAME.value==4) then
-        for dev=1,#AKM_INPUTS do
-          if (AKM_INPUTS[dev]==" KeyLab Essential 49 mk3 (DAW)") then
-            vws.AKM_PP_DEVICE_IN.value=dev
-            local in_device_name=AKM_INPUTS[dev]
-            print("AKM dev_in:",dev,in_device_name)
-            AKM_ACTIVATE=true
-            akm_input_midi(string.sub(in_device_name,2))
-            status=false
-            break
-          end
-        end
-      end
-      if (vws.AKM_PP_DEVICE_NAME.value==5) then
-        for dev=1,#AKM_INPUTS do
-          if (AKM_INPUTS[dev]==" KeyLab Essential 61 mk3 (DAW)") then
-            vws.AKM_PP_DEVICE_IN.value=dev
-            local in_device_name=AKM_INPUTS[dev]
-            --print("AKM dev_in:",dev,in_device_name)
-            AKM_ACTIVATE=true
-            akm_input_midi(string.sub(in_device_name,2))
-            status=false
-            break
-          end
-        end
-      end
-      if (vws.AKM_PP_DEVICE_NAME.value==6) then
-        for dev=1,#AKM_INPUTS do
-          if (AKM_INPUTS[dev]==" KeyLab Essential 88 mk3 (DAW)") then
-            vws.AKM_PP_DEVICE_IN.value=dev
-            local in_device_name=AKM_INPUTS[dev]
-            --print("AKM dev_in:",dev,in_device_name)
-            AKM_ACTIVATE=true
-            akm_input_midi(string.sub(in_device_name,2))
-            status=false
-            break
-          end
-        end
-      end
-      if (status) then
-        show_mess()
-      end
-    end
+
+  local input_devices=renoise.Midi.available_input_devices()
+  local output_devices=renoise.Midi.available_output_devices()
+
+  AKM_INPUTS={}
+  AKM_OUTPUTS={}
+
+  for i=1,#input_devices do
+    AKM_INPUTS[i]=input_devices[i]
   end
-  --- ---
-  --AKM_OUTPUTS=renoise.Midi.available_output_devices()
-  for i=1,#renoise.Midi.available_output_devices() do
-    AKM_OUTPUTS[i]=(" %s"):format(renoise.Midi.available_output_devices()[i])
+
+  for i=1,#output_devices do
+    AKM_OUTPUTS[i]=output_devices[i]
   end
+
+  if not table.is_empty(AKM_INPUTS) then
+    vws.AKM_PP_DEVICE_IN.items=AKM_INPUTS
+  end
+
   if not table.is_empty(AKM_OUTPUTS) then
     vws.AKM_PP_DEVICE_OUT.items=AKM_OUTPUTS
   end
+
+  local function open_input_by_name(saved_name)
+    local valid_name=akm_validate_device_name(saved_name, AKM_INPUTS)
+    if (not valid_name) then return false end
+    local _, found_index=akm_find_device_by_name(AKM_INPUTS, valid_name)
+    if (found_index ~= nil) then vws.AKM_PP_DEVICE_IN.value=found_index end
+    AKM_ACTIVATE=true
+    akm_input_midi(valid_name)
+    renoise.tool().preferences.saved_in_device.value=valid_name
+    return true
+  end
+
+  local function open_output_by_name(saved_name)
+    local valid_name=akm_validate_device_name(saved_name, AKM_OUTPUTS)
+    if (not valid_name) then return false end
+    local _, found_index=akm_find_device_by_name(AKM_OUTPUTS, valid_name)
+    if (found_index ~= nil) then vws.AKM_PP_DEVICE_OUT.value=found_index end
+    AKM_ACTIVATE=true
+    akm_output_midi(valid_name)
+    renoise.tool().preferences.saved_out_device.value=valid_name
+    return true
+  end
+
   if (AKM_LOCK_IO_DEVICES) then
-    --selecte default number of out device
-    local out_device_name=AKM_OUTPUTS[vws.AKM_PP_DEVICE_OUT.value]
-    print("AKM dev_out:",vws.AKM_PP_DEVICE_OUT.value,out_device_name)
-    akm_output_midi(string.sub(out_device_name,2))
-  else
-    --autoselect number of out device
-    if table.is_empty(AKM_OUTPUTS) then
-      return show_mess()
-    else
-      if (vws.AKM_PP_DEVICE_NAME.value==1) then
-        for dev=1,#AKM_OUTPUTS do
-          if (AKM_OUTPUTS[dev]==" KeyLab 49 mk3 (DAW)") then
-            vws.AKM_PP_DEVICE_OUT.value=dev
-            local out_device_name=AKM_OUTPUTS[dev]
-            print("AKM dev_out:",dev,out_device_name)
-            AKM_ACTIVATE=true
-            akm_output_midi(string.sub(out_device_name,2))
-            break
-          end
-        end
-      end
-      if (vws.AKM_PP_DEVICE_NAME.value==2) then
-        for dev=1,#AKM_OUTPUTS do
-          if (AKM_OUTPUTS[dev]==" KeyLab 61 mk3 (DAW)") then
-            vws.AKM_PP_DEVICE_OUT.value=dev
-            local out_device_name=AKM_OUTPUTS[dev]
-            --print("AKM dev_out:",dev,out_device_name)
-            AKM_ACTIVATE=true
-            akm_output_midi(string.sub(out_device_name,2))
-            break
-          end
-        end
-      end
-      if (vws.AKM_PP_DEVICE_NAME.value==3) then
-        for dev=1,#AKM_OUTPUTS do
-          if (AKM_OUTPUTS[dev]==" KeyLab 88 mk3 (DAW)") then
-            vws.AKM_PP_DEVICE_OUT.value=dev
-            local out_device_name=AKM_OUTPUTS[dev]
-            --print("AKM dev_out:",dev,out_device_name)
-            AKM_ACTIVATE=true
-            akm_output_midi(string.sub(out_device_name,2))
-            break
-          end
-        end
-      end
-      if (vws.AKM_PP_DEVICE_NAME.value==4) then
-        for dev=1,#AKM_OUTPUTS do
-          if (AKM_OUTPUTS[dev]==" KeyLab Essential 49 mk3 (DAW)") then
-            vws.AKM_PP_DEVICE_OUT.value=dev
-            local out_device_name=AKM_OUTPUTS[dev]
-            print("AKM dev_out:",dev,out_device_name)
-            AKM_ACTIVATE=true
-            akm_output_midi(string.sub(out_device_name,2))
-            break
-          end
-        end
-      end
-      if (vws.AKM_PP_DEVICE_NAME.value==5) then
-        for dev=1,#AKM_OUTPUTS do
-          if (AKM_OUTPUTS[dev]==" KeyLab Essential 61 mk3 (DAW)") then
-            vws.AKM_PP_DEVICE_OUT.value=dev
-            local out_device_name=AKM_OUTPUTS[dev]
-            --print("AKM dev_out:",dev,out_device_name)
-            AKM_ACTIVATE=true
-            akm_output_midi(string.sub(out_device_name,2))
-            break
-          end
-        end
-      end
-      if (vws.AKM_PP_DEVICE_NAME.value==6) then
-        for dev=1,#AKM_OUTPUTS do
-          if (AKM_OUTPUTS[dev]==" KeyLab Essential 88 mk3 (DAW)") then
-            vws.AKM_PP_DEVICE_OUT.value=dev
-            local out_device_name=AKM_OUTPUTS[dev]
-            --print("AKM dev_out:",dev,out_device_name)
-            AKM_ACTIVATE=true
-            akm_output_midi(string.sub(out_device_name,2))
-            break
-          end
-        end
+    if not table.is_empty(AKM_INPUTS) then
+      local current_in=AKM_INPUTS[vws.AKM_PP_DEVICE_IN.value] or AKM_INPUTS[1]
+      local in_name=akm_validate_device_name(current_in, AKM_INPUTS)
+      if (in_name ~= nil) then
+        vws.AKM_PP_DEVICE_IN.value=(vws.AKM_PP_DEVICE_IN.value or 1)
+        renoise.tool().preferences.saved_in_device.value=in_name
+        AKM_ACTIVATE=true
+        akm_input_midi(in_name)
       end
     end
+    if not table.is_empty(AKM_OUTPUTS) then
+      local current_out=AKM_OUTPUTS[vws.AKM_PP_DEVICE_OUT.value] or AKM_OUTPUTS[1]
+      local out_name=akm_validate_device_name(current_out, AKM_OUTPUTS)
+      if (out_name ~= nil) then
+        vws.AKM_PP_DEVICE_OUT.value=(vws.AKM_PP_DEVICE_OUT.value or 1)
+        renoise.tool().preferences.saved_out_device.value=out_name
+        AKM_ACTIVATE=true
+        akm_output_midi(out_name)
+      end
+    end
+    return
   end
-end
 
+  if (table.is_empty(AKM_INPUTS) or table.is_empty(AKM_OUTPUTS)) then
+    return show_mess()
+  end
+
+  local saved_in_device=akm_trim_device_name(renoise.tool().preferences.saved_in_device.value)
+  local saved_out_device=akm_trim_device_name(renoise.tool().preferences.saved_out_device.value)
+
+  if (not open_input_by_name(saved_in_device)) then
+    local first=AKM_INPUTS[1]
+    if (first == nil) then return show_mess() end
+    local first_name=akm_trim_device_name(first)
+    vws.AKM_PP_DEVICE_IN.value=1
+    renoise.tool().preferences.saved_in_device.value=first_name
+    AKM_ACTIVATE=true
+    akm_input_midi(first_name)
+  end
+
+  if (not open_output_by_name(saved_out_device)) then
+    local first=AKM_OUTPUTS[1]
+    if (first == nil) then return show_mess() end
+    local first_name=akm_trim_device_name(first)
+    vws.AKM_PP_DEVICE_OUT.value=1
+    renoise.tool().preferences.saved_out_device.value=first_name
+    AKM_ACTIVATE=true
+    akm_output_midi(first_name)
+  end
+
+  akm_store_selected_devices()
+end
 
 local function akm_check_midi_off()
   --midi in
@@ -2847,12 +2824,14 @@ end
 local function akm_ntf_metro()
   local metro_on={{0x90,0x59,0x7F}, "metro_on"}
   local metro_off={{0x90,0x59,0x00}, "metro_off"}
-  if (song.transport.metronome_enabled) then
-    akm_output_midi_invoke(metro_on)
-    vws.AKM_BTT_DAW_A_9.color=AKM_CLR.MARKER
-  else
-    akm_output_midi_invoke(metro_off)
-    vws.AKM_BTT_DAW_A_9.color=AKM_CLR.DEFAULT
+  if (vws.AKM_BTT_DAW_A_9 ~= nil) then
+    if (song.transport.metronome_enabled) then
+      akm_output_midi_invoke(metro_on)
+      vws.AKM_BTT_DAW_A_9.color=AKM_CLR.MARKER
+    else
+      akm_output_midi_invoke(metro_off)
+      vws.AKM_BTT_DAW_A_9.color=AKM_CLR.DEFAULT
+    end
   end
 end
 
@@ -3133,6 +3112,7 @@ local function akm_upper_panel()
         height=21,
         width=71,
         align="right",
+        font="bold",
         text="In Device "
       },
       vb:popup{
@@ -3149,6 +3129,7 @@ local function akm_upper_panel()
         height=21,
         width=81,
         align="right",
+        font="bold",
         text="Out Device "
       },
       vb:popup{
@@ -3658,7 +3639,7 @@ local function akm_mp_faders()
       vb:horizontal_aligner{
         mode="center",
         vb:rotary{
-          id=("AKM_RTY_%s"):format(num),
+          id=("AKM_ROT_%s"):format(num),
           active=false,
           height=41,
           width=41, 
