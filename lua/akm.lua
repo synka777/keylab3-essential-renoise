@@ -1072,7 +1072,7 @@ local function akm_left_dial()
   local mfm=renoise.ApplicationWindow.MIDDLE_FRAME_MIXER
   local mfi1=renoise.ApplicationWindow.MIDDLE_FRAME_INSTRUMENT_PHRASE_EDITOR
   local mfi2=renoise.ApplicationWindow.MIDDLE_FRAME_INSTRUMENT_SAMPLE_KEYZONES
-  local mfi3
+  local mfi3=renoise.ApplicationWindow.MIDDLE_FRAME_INSTRUMENT_SAMPLE_EDITOR
   local mfi4=renoise.ApplicationWindow.MIDDLE_FRAME_INSTRUMENT_SAMPLE_MODULATION
   local mfi5=renoise.ApplicationWindow.MIDDLE_FRAME_INSTRUMENT_SAMPLE_EFFECTS
   local mfi6=renoise.ApplicationWindow.MIDDLE_FRAME_INSTRUMENT_PLUGIN_EDITOR
@@ -2448,12 +2448,9 @@ local function akm_input_midi(in_device_name)
 
     local akm_knob_last = {}
     local function midi_callback(message)
-      assert(#message==3)
-      assert(message[1]>=00 and message[1]<=0xFF)
-      assert(message[2]>=00 and message[2]<=0xFF)
-      assert(message[3]>=00 and message[3]<=0xFF)
-      print(("%X %X %X || %s"):format(message[1],message[2],message[3],valid_name))
-      
+      assert(#message>=1)
+      for i=1,#message do assert(message[i]>=0 and message[i]<=0xFF) end
+
       --- ---pressed & released (led)
       for r=1,#akm_tbl_rules do
         local rule=akm_tbl_rules[r][1]
@@ -2501,8 +2498,8 @@ local function akm_input_midi(in_device_name)
       if (message[1]==0xB0 and message[2]==43 and message[3]==0x00) then return akm_song_redo() end
       
       --browses center controls, dial (instruments navigator) - press=CC117, turn=CC116
-      if (message[1]==0xB0 and message[2]==117 and message[3]==0x7F) then vws.AKM_BMP_DIAL.visible=false return akm_button_dial_add_timer() end
-      if (message[1]==0xB0 and message[2]==117 and message[3]==0x00) then vws.AKM_BMP_DIAL.visible=true return akm_button_dial_remove_timer() end
+      if (message[1]==0xB0 and message[2]==117 and message[3]==0x7F) then return akm_button_dial_add_timer() end
+      if (message[1]==0xB0 and message[2]==117 and message[3]==0x00) then return akm_button_dial_remove_timer() end
       if (message[1]==0xB0 and message[2]==116 and message[3]>=0x41) then return akm_left_dial() end
       if (message[1]==0xB0 and message[2]==116 and message[3]<=0x40) then return akm_right_dial() end
       
@@ -2621,6 +2618,8 @@ local function akm_input_midi(in_device_name)
       --if (message[1]==0xB0 and message[2]==0x75 and message[3]==0x7F) then print("Preset") end
       --if (message[1]==0xB0 and message[2]==0x76 and message[3]==0x7F) then print("Analog Lab") end
       --{0xF0,0x00,0x20,0x6B,0x7F,0x42,0x02,0x00,0x00,0x15,0x7F,0xF7}
+
+      --mod wheel (CC1) is left untouched, same as pitch bend, so it can be freely macro-mapped in Renoise
     end
     if (AKM_MIDI_DEVICE_IN and AKM_MIDI_DEVICE_IN.is_open and AKM_MIDI_DEVICE_IN.name==valid_name) then
       return
