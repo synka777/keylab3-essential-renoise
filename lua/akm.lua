@@ -59,6 +59,31 @@ local AKM_OUTPUTS={}
 local AKM_LOCK_IO_DEVICES=false
 local AKM_ACTIVATE=false
 local AKM_STOP_STATUS=false
+local AKM_TAP_LAST_TIME=nil
+local AKM_TAP_INTERVALS={}
+
+local function akm_tap_tempo()
+  local now=os.clock()
+  if (AKM_TAP_LAST_TIME~=nil) then
+    local interval=now-AKM_TAP_LAST_TIME
+    if (interval<2.0) then
+      table.insert(AKM_TAP_INTERVALS,interval)
+      if (#AKM_TAP_INTERVALS>4) then
+        table.remove(AKM_TAP_INTERVALS,1)
+      end
+      local sum=0
+      for _,v in ipairs(AKM_TAP_INTERVALS) do sum=sum+v end
+      local avg=sum/#AKM_TAP_INTERVALS
+      local bpm=60/avg
+      if (bpm<32) then bpm=32 elseif (bpm>999) then bpm=999 end
+      song.transport.bpm=math.floor(bpm+0.5)
+      vws.AKM_TXT_DIGITAL_1.text=("BPM: %d"):format(song.transport.bpm)
+    else
+      AKM_TAP_INTERVALS={}
+    end
+  end
+  AKM_TAP_LAST_TIME=now
+end
 local AKM_TRK_REPEAT={70,300,true,true}
 local AKM_SEQ_REPEAT={70,300,true,true}
 local AKM_LNE_REPEAT={30,300}
@@ -668,64 +693,66 @@ local function akm_write_remove_timer()
 end
 
 ------ Pads (Bank A). Unused since they don't consume MIDI events and only come from (MIDI) device.
-local function akm_pad1()
---99 2c GUI:Middle Frame:Show Pattern Matrix [Toggle]
-  -- print("pad 1");
+local function akm_pad1() -- Toggle Pattern Matrix
+  local mfp=renoise.ApplicationWindow.MIDDLE_FRAME_PATTERN_MATRIX
+  local mfe=renoise.ApplicationWindow.MIDDLE_FRAME_PATTERN_EDITOR
+  if (rna.window.active_middle_frame==mfp) then
+    rna.window.active_middle_frame=mfe
+  else
+    rna.window.active_middle_frame=mfp
+  end
 end
 
-local function akm_pad2()
---99 2d GUI:Upper Frame:Show Upper Frame [Toggle]
-  -- print("pad 2");
+local function akm_pad2() -- Toggle Upper Frame
+  rna.window.upper_frame_is_visible=not rna.window.upper_frame_is_visible
 end
 
-local function akm_pad3()
---99 2e GUI:Lower Frame:Show Lower Frame [Toggle]
-  -- print("pad 3");
+local function akm_pad3() -- Toggle Lower Frame
+  rna.window.lower_frame_is_visible=not rna.window.lower_frame_is_visible
 end
 
-local function akm_pad4()
---99 2f GUI:Middle Frame:Show Pattern Advanced Edit [Toggle]
-  -- print("pad 4");
+local function akm_pad4() -- Toggle Pattern Advanced Edit
+  local mfa=renoise.ApplicationWindow.MIDDLE_FRAME_PATTERN_ADVANCED_EDIT
+  local mfe=renoise.ApplicationWindow.MIDDLE_FRAME_PATTERN_EDITOR
+  if (rna.window.active_middle_frame==mfa) then
+    rna.window.active_middle_frame=mfe
+  else
+    rna.window.active_middle_frame=mfa
+  end
 end
 
 local function akm_pad5() -- Select Previous Sequence Pos
-  --
-  -- t.playback_pos = renoise.SongPos(math.max(1, t.playback_pos.sequence - 1), 1)
+  local t=song.transport
+  t.playback_pos=renoise.SongPos(math.max(1,t.playback_pos.sequence-1),1)
 end
 
 local function akm_pad6() -- Select Previous Track
-  -- local s = renoise.song()
-  -- s.selected_track_index = math.max(1, s.selected_track_index - 1)
+  song.selected_track_index=math.max(1,song.selected_track_index-1)
 end
 
 local function akm_pad7() -- Select Next Track
-  -- local s = renoise.song()
-  -- s.selected_track_index = math.min(#s.tracks, s.selected_track_index + 1)
+  song.selected_track_index=math.min(#song.tracks,song.selected_track_index+1)
 end
 
 local function akm_pad8() -- Decrease Current Instrument
-  -- local s = renoise.song()
-  -- s.selected_instrument_index = math.max(1, s.selected_instrument_index - 1)
+  song.selected_instrument_index=math.max(1,song.selected_instrument_index-1)
 end
 
 local function akm_pad9() -- Select Next Sequence Pos
-  -- local t = renoise.song().transport
-  -- t.playback_pos = renoise.SongPos(math.min(#renoise.song().sequencer.pattern_sequence, t.playback_pos.sequence + 1), 1)
+  local t=song.transport
+  t.playback_pos=renoise.SongPos(math.min(#song.sequencer.pattern_sequence,t.playback_pos.sequence+1),1)
 end
 
 local function akm_pad10() -- Select Previous Column
-  -- local s = renoise.song()
-  -- s.selected_note_column_index = math.max(1, s.selected_note_column_index - 1)
+  song.selected_note_column_index=math.max(1,song.selected_note_column_index-1)
 end
 
 local function akm_pad11() -- Select Next Column
-  -- local s = renoise.song()
-  -- s.selected_note_column_index = math.min(12, s.selected_note_column_index + 1) -- 12 = max note columns
+  song.selected_note_column_index=math.min(12,song.selected_note_column_index+1)
 end
 
 local function akm_pad12() -- Increase Current Instrument
-  -- local s = renoise.song()
-  -- s.selected_instrument_index = math.min(#s.instruments, s.selected_instrument_index + 1)
+  song.selected_instrument_index=math.min(#song.instruments,song.selected_instrument_index+1)
 end
 
 
@@ -2685,6 +2712,7 @@ local function akm_input_midi(in_device_name)
       --metro, undo, redo
       if (message[1]==0xB0 and message[2]==27 and message[3]==0x00) then return akm_metro() end
       if (message[1]==0xB0 and message[2]==20 and message[3]==0x00) then return akm_stop() end
+      if (message[1]==0xB0 and message[2]==23 and message[3]==0x7F) then return akm_tap_tempo() end
       --Save button -> quick-save if the song already has a file, else prompt
       if (message[1]==0xB0 and message[2]==40 and message[3]==0x00) then
         if (song.file_name~=nil and song.file_name~="" and type(rna.save_song)=="function") then
