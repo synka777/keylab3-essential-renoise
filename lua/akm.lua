@@ -1435,6 +1435,28 @@ end
 
 
 
+local function akm_knob_note_val(raw)
+  if (song.transport.edit_mode and AKM_VAL_LOCK[1]) then
+    local snc=song.selected_note_column
+    if (snc) then
+      local target=math.floor(raw/127*121+0.5)
+      if (target<0) then target=0 elseif (target>121) then target=121 end
+      snc.note_value=target
+      if (target<120) then
+        snc.instrument_value=song.selected_instrument_index-1
+      else
+        snc.instrument_value=255
+      end
+      if (vws and vws.AKM_ROT_1) then
+        vws.AKM_ROT_1.value=target
+      end
+      akm_mnt_nte_ins(snc.note_value,snc.instrument_value)
+    end
+  end
+end
+
+
+
 --2 knob for instrument
 local function akm_nc_previous_instrument()
   if (song.transport.edit_mode and AKM_VAL_LOCK[2]) then
@@ -1466,6 +1488,26 @@ local function akm_nc_next_instrument()
         snc.instrument_value=255
       end
       vws.AKM_ROT_2.value=snc.instrument_value
+      akm_mnt_nte_ins(snc.note_value,snc.instrument_value)
+    end
+  end
+end
+
+
+
+local function akm_knob_instrument_val(raw)
+  if (song.transport.edit_mode and AKM_VAL_LOCK[2]) then
+    local snc=song.selected_note_column
+    if (snc) then
+      local maxidx=#song.instruments-1
+      if (maxidx<0) then maxidx=0 end
+      local target=math.floor(raw/127*maxidx+0.5)
+      if (target<0) then target=0 elseif (target>maxidx) then target=maxidx end
+      snc.instrument_value=target
+      song.selected_instrument_index=target+1
+      if (vws and vws.AKM_ROT_2) then
+        vws.AKM_ROT_2.value=raw*2
+      end
       akm_mnt_nte_ins(snc.note_value,snc.instrument_value)
     end
   end
@@ -1800,6 +1842,40 @@ local function akm_next_fx_val()
 end
 
 
+
+local function akm_knob_fx_val(raw)
+  if (song.transport.edit_mode and AKM_VAL_LOCK[6]) then
+    local snc,sec=song.selected_note_column,song.selected_effect_column
+    if (snc) then
+      local idx=math.floor(raw/127*(#AKM_SFX-1)+0.5)+1
+      if (idx<1) then idx=1 elseif (idx>#AKM_SFX) then idx=#AKM_SFX end
+      snc.effect_number_string=AKM_SFX[idx]
+      if (vws and vws.AKM_ROT_6) then
+        vws.AKM_ROT_6.max=#AKM_SFX-1
+        vws.AKM_ROT_6.value=idx-1
+      end
+      vws.AKM_TXT_DIGITAL_2.text=("sFX: %s%.2X"):format(string.sub(snc.effect_number_string,2),snc.effect_amount_value)
+      akm_nc_visible_sfx()
+    end
+    if (sec) then
+      local idx=math.floor(raw/127*(#AKM_EFF-1)+0.5)+1
+      if (idx<1) then idx=1 elseif (idx>#AKM_EFF) then idx=#AKM_EFF end
+      sec.number_string=AKM_EFF[idx]
+      if (vws and vws.AKM_ROT_6) then
+        vws.AKM_ROT_6.max=#AKM_EFF-1
+        vws.AKM_ROT_6.value=idx-1
+      end
+      if (string.sub(sec.number_string,1,1)=="Z") then
+        vws.AKM_TXT_DIGITAL_2.text=("FX: %s%.2X"):format(sec.number_string,sec.amount_value)
+      else
+        vws.AKM_TXT_DIGITAL_2.text=("FX: %s%.2X"):format(string.sub(sec.number_string,2),sec.amount_value)
+      end
+    end
+  end
+end
+
+
+
 --7 knob for amount
 local function akm_previous_fx_amo()
   if (song.transport.edit_mode and AKM_VAL_LOCK[7]) then
@@ -1942,20 +2018,20 @@ local function akm_previous_nc_ec()
       if (song.selected_note_column) then
         if (song.selected_note_column_index>1) then
           song.selected_note_column_index=song.selected_note_column_index-1
-          vws.AKM_ROT_8.value=math.floor((song.selected_note_column_index-1)*127/21)
+          vws.AKM_ROT_8.value=math.floor((song.selected_note_column_index-1)*127/(song.selected_track.visible_note_columns+song.selected_track.visible_effect_columns))
           vws.AKM_TXT_DIGITAL_2.text=("Note Column %s"):format(song.selected_note_column_index)
         end
       else
         if (song.selected_effect_column_index>1) then
           song.selected_effect_column_index=song.selected_effect_column_index-1
-          vws.AKM_ROT_8.value=math.floor((song.selected_effect_column_index-1+12)*127/21)
+          vws.AKM_ROT_8.value=math.floor((song.selected_effect_column_index-1+song.selected_track.visible_note_columns)*127/(song.selected_track.visible_note_columns+song.selected_track.visible_effect_columns))
           vws.AKM_TXT_DIGITAL_2.text=("Effect Column %s"):format(song.selected_effect_column_index)
         end
       end
     else
       if (song.selected_effect_column_index>1) then
         song.selected_effect_column_index=song.selected_effect_column_index-1
-        vws.AKM_ROT_8.value=math.floor((song.selected_effect_column_index-1+12)*127/21)
+        vws.AKM_ROT_8.value=math.floor((song.selected_effect_column_index-1+song.selected_track.visible_note_columns)*127/(song.selected_track.visible_note_columns+song.selected_track.visible_effect_columns))
         vws.AKM_TXT_DIGITAL_2.text=("Effect Column %s"):format(song.selected_effect_column_index)
       end
     end
@@ -1974,7 +2050,7 @@ local function akm_next_nc_ec()
         end
         if (song.selected_note_column_index<song.selected_track.visible_note_columns) then
           song.selected_note_column_index=song.selected_note_column_index+1
-          vws.AKM_ROT_8.value=math.floor((song.selected_note_column_index+1)*127/21)
+          vws.AKM_ROT_8.value=math.floor((song.selected_note_column_index+1)*127/(song.selected_track.visible_note_columns+song.selected_track.visible_effect_columns))
           vws.AKM_TXT_DIGITAL_2.text=("Note Column %s"):format(song.selected_note_column_index)
         end
       else
@@ -1983,7 +2059,7 @@ local function akm_next_nc_ec()
         end
         if (song.selected_effect_column_index<song.selected_track.visible_effect_columns) then
           song.selected_effect_column_index=song.selected_effect_column_index+1
-          vws.AKM_ROT_8.value=math.floor((song.selected_effect_column_index+1+12)*127/21)
+          vws.AKM_ROT_8.value=math.floor((song.selected_effect_column_index+1+song.selected_track.visible_note_columns)*127/(song.selected_track.visible_note_columns+song.selected_track.visible_effect_columns))
           vws.AKM_TXT_DIGITAL_2.text=("Effect Column %s"):format(song.selected_effect_column_index)
         end
       end
@@ -1993,7 +2069,7 @@ local function akm_next_nc_ec()
       end
       if (song.selected_effect_column_index<song.selected_track.visible_effect_columns) then
         song.selected_effect_column_index=song.selected_effect_column_index+1
-        vws.AKM_ROT_8.value=math.floor((song.selected_effect_column_index+1+12)*127/21)
+        vws.AKM_ROT_8.value=math.floor((song.selected_effect_column_index+1+song.selected_track.visible_note_columns)*127/(song.selected_track.visible_note_columns+song.selected_track.visible_effect_columns))
         vws.AKM_TXT_DIGITAL_2.text=("Effect Column %s"):format(song.selected_effect_column_index)
       end
     end
@@ -2640,18 +2716,15 @@ local function akm_input_midi(in_device_name)
         if (delta > 64) then delta = delta - 128
         elseif (delta < -64) then delta = delta + 128
         end
-        if (delta > 0) then
-          for i=1,delta do next_fn() end
-        elseif (delta < 0) then
-          for i=1,-delta do prev_fn() end
-        end
+        if (delta > 0) then return next_fn() end
+        if (delta < 0) then return prev_fn() end
       end
       
       --knob 1 note
-      if (message[1]==0xB0 and message[2]==96) then return akm_knob_dir(96,message[3],akm_nc_previous_note,akm_nc_next_note) end
+      if (message[1]==0xB0 and message[2]==96) then return akm_knob_note_val(message[3]) end
       
       --knob 2 instrument
-      if (message[1]==0xB0 and message[2]==97) then return akm_knob_dir(97,message[3],akm_nc_previous_instrument,akm_nc_next_instrument) end
+      if (message[1]==0xB0 and message[2]==97) then return akm_knob_instrument_val(message[3]) end
       
       --knob 3 volume
       if (message[1]==0xB0 and message[2]==98) then return akm_knob_volume_val(message[3]) end
@@ -2663,7 +2736,7 @@ local function akm_input_midi(in_device_name)
       if (message[1]==0xB0 and message[2]==100) then return akm_knob_delay_val(message[3]) end
       
       --knob 6 sample fx
-      if (message[1]==0xB0 and message[2]==101) then return akm_knob_dir(101,message[3],akm_previous_fx_val,akm_next_fx_val) end
+      if (message[1]==0xB0 and message[2]==101) then return akm_knob_fx_val(message[3]) end
       
       --knob 7 effects
       if (message[1]==0xB0 and message[2]==102) then return akm_knob_fx_amo_val(message[3]) end
