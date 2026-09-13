@@ -34,15 +34,22 @@ aw=renoise.ApplicationWindow
 --about
 local AKM_ABOUT_TTP=
   "VERSION: "..akm_version.." "..akm_build.." \n"..
-  "COMPATIBILITY: Renoise 3.1.1 (tested under OSX 10.9 with "..akm_main_title.." 49)\n"..
+  "HARDWARE: Arturia KeyLab Essential 49/61/88 mk3\n"..
+  "COMPATIBILITY: Renoise 3.5.x (Lua API 6)\n"..
   "LICENSE: GNU General Public License\n"..
-  "CODE: LUA 5.1 + API 5 (Renoise 3.1.1)\n"..
-  "AUTHORS: foma; Original MKII version by ulneiz\n"..
+  "ORIGINAL AUTHORS: foma; Original MKII version by ulneiz\n"..
+  "ESSENTIAL PORT: this fork\n"..
   "\n"..
-  "- On KeyLab, select DAW Program with MCU protocol;\n"..
-  "- Set KeyLab (MIDI) device as Renoise Master Keyboard;\n"..
-  "- Choose your device name in the list and press ON button.\n"..
-  "Optionally patch your song with MIDI mappings to use Bank A pads for navigation."
+  "SETUP (one-time):\n"..
+  "- On the keyboard, load the \"DAWs Program\" (press Prog until the screen shows it);\n"..
+  "- In this tool, select your model (49/61/88 Essential) and the plain 'MIDI' In/Out\n"..
+  "  device (NOT the MCU/HUI port - this model doesn't use it);\n"..
+  "- Edit > Preferences > MIDI > \"Ignore specific controllers\": paste this list so\n"..
+  "  Renoise doesn't record buttons/knobs into your patterns as raw commands:\n"..
+  "  20,21,22,24,25,26,27,40,42,43,96,97,98,99,100,101,102,103,104,105,106,107,\n"..
+  "  108,109,110,111,112,113,116,117,118\n"..
+  "- On the instrument(s) you play, set MIDI Input > Channel to 1 (instead of Any)\n"..
+  "  so pads (channel 10) aren't recorded as notes."
 
 --global song
 song=nil
@@ -4052,9 +4059,9 @@ local function akm_lower_panel()
         text=AKM_ABOUT_TTP
       },
       vb:bitmap{
-        height=150,
+        height=175,
         width=569,
-        bitmap="ico/keylab_mk3_ico.png"
+        bitmap="ico/keylab_essential_ico.png"
       }
     }
   }
@@ -4307,8 +4314,7 @@ local function akm_essential_first_run_setup()
       text=cc_list,
       width=420,
       height=40
-    },
-    vb2:text{text="2) On the instrument(s) you play, set MIDI Input > Channel to 1 (instead of Any) so pads on channel 10 aren't recorded as notes."},
+    }
   }
 
   renoise.app():show_custom_prompt("Arturia KeyLab Essential mk3 setup",content,{"Got it"})
