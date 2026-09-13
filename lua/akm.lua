@@ -912,6 +912,17 @@ local function akm_stop()
   end
 end
 
+local function akm_quantize()
+  song.transport.record_quantize_enabled=not song.transport.record_quantize_enabled
+  if (song.transport.record_quantize_enabled) then
+    vws.AKM_TXT_DIGITAL_1.text=("Quantize: ON (%d lines)"):format(song.transport.record_quantize_lines)
+    akm_essential_set_led(0x0D,0x7F,0x7F,0x7F)
+  else
+    vws.AKM_TXT_DIGITAL_1.text="Quantize: OFF"
+    akm_essential_set_led(0x0D,0x18,0x18,0x18)
+  end
+end
+
 
 --4 play song
 local function akm_play()
@@ -2447,6 +2458,23 @@ local function akm_output_midi_invoke(tbl)
 end
 
 
+AKM_ESSENTIAL_DAW_CONNECTED=false
+
+function akm_essential_daw_connect()
+  if not (AKM_ESSENTIAL_DAW_CONNECTED) and (AKM_MIDI_DEVICE_OUT and AKM_MIDI_DEVICE_OUT.is_open) then
+    AKM_MIDI_DEVICE_OUT:send({0xF0,0x00,0x20,0x6B,0x7F,0x42,0x02,0x0F,0x40,0x5A,0x01,0xF7})
+    AKM_ESSENTIAL_DAW_CONNECTED=true
+  end
+end
+
+function akm_essential_set_led(button_id,r,g,b)
+  if (AKM_MIDI_DEVICE_OUT and AKM_MIDI_DEVICE_OUT.is_open) then
+    akm_essential_daw_connect()
+    AKM_MIDI_DEVICE_OUT:send({0xF0,0x00,0x20,0x6B,0x7F,0x42,0x04,0x01,0x16,button_id,r,g,b,0xF7})
+  end
+end
+
+
 local akm_tbl_rules={
   --track controls
   
@@ -2713,6 +2741,7 @@ local function akm_input_midi(in_device_name)
       if (message[1]==0xB0 and message[2]==27 and message[3]==0x00) then return akm_metro() end
       if (message[1]==0xB0 and message[2]==20 and message[3]==0x00) then return akm_stop() end
       if (message[1]==0xB0 and message[2]==23 and message[3]==0x7F) then return akm_tap_tempo() end
+      if (message[1]==0xB0 and message[2]==41 and message[3]==0x00) then return akm_quantize() end
       --Save button -> quick-save if the song already has a file, else prompt
       if (message[1]==0xB0 and message[2]==40 and message[3]==0x00) then
         if (song.file_name~=nil and song.file_name~="" and type(rna.save_song)=="function") then
