@@ -62,7 +62,20 @@ local AKM_STOP_STATUS=false
 local AKM_TAP_LAST_TIME=nil
 local AKM_TAP_INTERVALS={}
 
+function akm_tap_led_dim_callback()
+  akm_essential_set_led(0x17,0x18,0x18,0x18)
+  if (renoise.tool():has_timer(akm_tap_led_dim_callback)) then
+    renoise.tool():remove_timer(akm_tap_led_dim_callback)
+  end
+end
+
 local function akm_tap_tempo()
+  akm_essential_set_led(0x17,0x7F,0x7F,0x7F)
+  if (renoise.tool():has_timer(akm_tap_led_dim_callback)) then
+    renoise.tool():remove_timer(akm_tap_led_dim_callback)
+  end
+  renoise.tool():add_timer(akm_tap_led_dim_callback,2000)
+
   local now=os.clock()
   if (AKM_TAP_LAST_TIME~=nil) then
     local interval=now-AKM_TAP_LAST_TIME
@@ -919,7 +932,7 @@ local function akm_quantize()
     akm_essential_set_led(0x0D,0x7F,0x7F,0x7F)
   else
     vws.AKM_TXT_DIGITAL_1.text="Quantize: OFF"
-    akm_essential_set_led(0x0D,0x18,0x18,0x18)
+    akm_essential_set_led(0x0D,0x10,0x10,0x10)
   end
 end
 
@@ -930,9 +943,11 @@ local function akm_play()
   if (song.transport.playing) then
     song.transport:stop()
     vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[29]
+    akm_essential_set_led(0x15,0x00,0x18,0x00)
   else
     song.transport:start(prp)
     vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[30]
+    akm_essential_set_led(0x15,0x00,0x7F,0x00)
   end
 end
 
@@ -942,9 +957,11 @@ local function akm_edit_mode()
   if (song.transport.edit_mode) then
     song.transport.edit_mode=false
     vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[31]
+    akm_essential_set_led(0x16,0x18,0x00,0x00)
   else
     song.transport.edit_mode=true
     vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[32]
+    akm_essential_set_led(0x16,0x7F,0x00,0x00)
     local fpe=renoise.ApplicationWindow.MIDDLE_FRAME_PATTERN_EDITOR
     if (rna.window.active_middle_frame~=fpe) then
       rna.window.active_middle_frame=fpe
@@ -957,9 +974,11 @@ local function akm_loop()
   if (song.transport.loop_pattern) then
     song.transport.loop_pattern=false
     vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[33]
+    akm_essential_set_led(0x10,0x18,0x18,0x00)
   else
     song.transport.loop_pattern=true
     vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[34]
+    akm_essential_set_led(0x10,0x7F,0x7F,0x00)
   end
 end
 
