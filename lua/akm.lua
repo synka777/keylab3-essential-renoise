@@ -734,6 +734,16 @@ local function akm_pad4() -- Toggle Pattern Advanced Edit
   end
 end
 
+function akm_toggle_mixer()
+  local mfm=renoise.ApplicationWindow.MIDDLE_FRAME_MIXER
+  local mfe=renoise.ApplicationWindow.MIDDLE_FRAME_PATTERN_EDITOR
+  if (rna.window.active_middle_frame==mfm) then
+    rna.window.active_middle_frame=mfe
+  else
+    rna.window.active_middle_frame=mfm
+  end
+end
+
 local function akm_pad5() -- Select Previous Sequence Pos
   local t=song.transport
   t.playback_pos=renoise.SongPos(math.max(1,t.playback_pos.sequence-1),1)
@@ -943,11 +953,9 @@ local function akm_play()
   if (song.transport.playing) then
     song.transport:stop()
     vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[29]
-    akm_essential_set_led(0x15,0x00,0x18,0x00)
   else
     song.transport:start(prp)
     vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[30]
-    akm_essential_set_led(0x15,0x00,0x7F,0x00)
   end
 end
 
@@ -957,11 +965,9 @@ local function akm_edit_mode()
   if (song.transport.edit_mode) then
     song.transport.edit_mode=false
     vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[31]
-    akm_essential_set_led(0x16,0x18,0x00,0x00)
   else
     song.transport.edit_mode=true
     vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[32]
-    akm_essential_set_led(0x16,0x7F,0x00,0x00)
     local fpe=renoise.ApplicationWindow.MIDDLE_FRAME_PATTERN_EDITOR
     if (rna.window.active_middle_frame~=fpe) then
       rna.window.active_middle_frame=fpe
@@ -974,11 +980,9 @@ local function akm_loop()
   if (song.transport.loop_pattern) then
     song.transport.loop_pattern=false
     vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[33]
-    akm_essential_set_led(0x10,0x18,0x18,0x00)
   else
     song.transport.loop_pattern=true
     vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[34]
-    akm_essential_set_led(0x10,0x7F,0x7F,0x00)
   end
 end
 
@@ -2493,6 +2497,61 @@ function akm_essential_set_led(button_id,r,g,b)
   end
 end
 
+function akm_essential_play_led_sync()
+  if (song.transport.playing) then
+    akm_essential_set_led(0x15,0x00,0x7F,0x00)
+  else
+    akm_essential_set_led(0x15,0x00,0x18,0x00)
+  end
+end
+
+function akm_essential_edit_led_sync()
+  if (song.transport.edit_mode) then
+    akm_essential_set_led(0x16,0x7F,0x00,0x00)
+  else
+    akm_essential_set_led(0x16,0x18,0x00,0x00)
+  end
+end
+
+function akm_essential_loop_led_sync()
+  if (song.transport.loop_pattern) then
+    akm_essential_set_led(0x10,0x7F,0x7F,0x00)
+  else
+    akm_essential_set_led(0x10,0x18,0x18,0x00)
+  end
+end
+
+function akm_essential_mixer_led_sync()
+  local mfm=renoise.ApplicationWindow.MIDDLE_FRAME_MIXER
+  if (rna.window.active_middle_frame==mfm) then
+    akm_essential_set_led(0x07,0x7F,0x7F,0x7F)
+  else
+    akm_essential_set_led(0x07,0x18,0x18,0x18)
+  end
+end
+
+function akm_essential_attach_led_observers()
+  if (song and song.transport) then
+    if not (song.transport.playing_observable:has_notifier(akm_essential_play_led_sync)) then
+      song.transport.playing_observable:add_notifier(akm_essential_play_led_sync)
+    end
+    if not (song.transport.edit_mode_observable:has_notifier(akm_essential_edit_led_sync)) then
+      song.transport.edit_mode_observable:add_notifier(akm_essential_edit_led_sync)
+    end
+    if not (song.transport.loop_pattern_observable:has_notifier(akm_essential_loop_led_sync)) then
+      song.transport.loop_pattern_observable:add_notifier(akm_essential_loop_led_sync)
+    end
+  end
+  if (rna and rna.window and rna.window.active_middle_frame_observable) then
+    if not (rna.window.active_middle_frame_observable:has_notifier(akm_essential_mixer_led_sync)) then
+      rna.window.active_middle_frame_observable:add_notifier(akm_essential_mixer_led_sync)
+    end
+  end
+end
+
+rnt.app_new_document_observable:add_notifier(akm_essential_attach_led_observers)
+akm_essential_attach_led_observers()
+
 
 local akm_tbl_rules={
   --track controls
@@ -2761,6 +2820,7 @@ local function akm_input_midi(in_device_name)
       if (message[1]==0xB0 and message[2]==20 and message[3]==0x00) then return akm_stop() end
       if (message[1]==0xB0 and message[2]==23 and message[3]==0x7F) then return akm_tap_tempo() end
       if (message[1]==0xB0 and message[2]==41 and message[3]==0x00) then return akm_quantize() end
+      if (message[1]==0xB0 and message[2]==119 and message[3]==0x00) then return akm_toggle_mixer() end
       --Save button -> quick-save if the song already has a file, else prompt
       if (message[1]==0xB0 and message[2]==40 and message[3]==0x00) then
         if (song.file_name~=nil and song.file_name~="" and type(rna.save_song)=="function") then
