@@ -321,118 +321,16 @@ AKM_EFF={"00","0A","0U","0D","0G","0V","0I","0O","0T","0C","0S","0B","0E","0N", 
 --step length convert tonumber
 
 --4 read --> (upper frame view)
-local function akm_read()
-  if (rna.window.sample_record_dialog_is_visible) then
-    song.transport:start_stop_sample_recording()
-    vws.AKM_TXT_DIGITAL_1.text="Start/stop recording\nthe selected sample."
-  else
-    local fts=renoise.ApplicationWindow.UPPER_FRAME_TRACK_SCOPES
-    local fms=renoise.ApplicationWindow.UPPER_FRAME_MASTER_SPECTRUM
-    if not (rna.window.mixer_view_is_detached) then
-      if not (rna.window.upper_frame_is_visible) then
-        rna.window.upper_frame_is_visible=true
-        rna.window.active_upper_frame=fts
-        vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[8]
-      elseif (rna.window.active_upper_frame==fts) then
-        rna.window.active_upper_frame=fms
-        vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[9]
-      elseif (rna.window.active_upper_frame==fms) then
-        rna.window.upper_frame_is_visible=false
-        vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[10]
-      end
-    else
-      if not (rna.window.upper_frame_is_visible) then
-        rna.window.upper_frame_is_visible=true
-        rna.window.active_upper_frame=fts
-        vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[8]
-      elseif (rna.window.active_upper_frame==fts) then
-        rna.window.upper_frame_is_visible=false
-        
-        -- --incomplete!!!
-      
-      end
-    end
-  end
-end
 
 
 
-local function akm_read_add_timer()
-  if not rnt:has_timer(akm_read_add_timer) then
-    rnt:add_timer(akm_read_add_timer,700)
-  else
-    if (rna.window.pattern_matrix_is_visible) then
-      rna.window.pattern_matrix_is_visible=false
-      vws.AKM_TXT_DIGITAL_1.text="Hide Pattern Seq.\nMatrix Panel"
-    else
-      rna.window.pattern_matrix_is_visible=true
-      vws.AKM_TXT_DIGITAL_1.text="Show Pattern Seq.\nMatrix Panel"
-    end
-    if rnt:has_timer(akm_read_add_timer) then
-      rnt:remove_timer(akm_read_add_timer)
-    end
-  end  
-end
 
-local function akm_read_remove_timer()
-  if rnt:has_timer(akm_read_add_timer) then
-    akm_read()
-    rnt:remove_timer(akm_read_add_timer)
-  end
-end
 
 
 
 --5 write --> (lower frame view)
-local function akm_write()
-  if (rna.window.sample_record_dialog_is_visible) then
-    song.transport:cancel_sample_recording()
-    vws.AKM_TXT_DIGITAL_1.text="Cancel recording\nthe selected sample."
-  else
-    local ftd=renoise.ApplicationWindow.LOWER_FRAME_TRACK_DSPS
-    local fta=renoise.ApplicationWindow.LOWER_FRAME_TRACK_AUTOMATION
-    local fpe=renoise.ApplicationWindow.MIDDLE_FRAME_PATTERN_EDITOR
-    local fmx=renoise.ApplicationWindow.MIDDLE_FRAME_MIXER
-    if not (rna.window.lower_frame_is_visible) then
-      rna.window.lower_frame_is_visible=true
-      rna.window.active_lower_frame=ftd
-      vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[11]
-    elseif (rna.window.active_lower_frame==ftd) then
-      rna.window.active_lower_frame=fta
-      vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[12]
-    elseif (rna.window.active_lower_frame==fta) then
-      rna.window.lower_frame_is_visible=false
-      vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[13]
-    end
-    if (rna.window.active_middle_frame~=fpe or rna.window.active_middle_frame~=fmx) then
-      rna.window.active_middle_frame=fpe
-    end
-  end
-end
 
-local function akm_write_add_timer()
-  if not rnt:has_timer(akm_write_add_timer) then
-    rnt:add_timer(akm_write_add_timer,700)
-  else
-    if (rna.window.pattern_advanced_edit_is_visible) then
-      rna.window.pattern_advanced_edit_is_visible=false
-      vws.AKM_TXT_DIGITAL_1.text="Hide Advanced\nOperations Panel"
-    else
-      rna.window.pattern_advanced_edit_is_visible=true
-      vws.AKM_TXT_DIGITAL_1.text="Show Advanced\nOperations Panel"
-    end
-    if rnt:has_timer(akm_write_add_timer) then
-      rnt:remove_timer(akm_write_add_timer)
-    end
-  end  
-end
 
-local function akm_write_remove_timer()
-  if rnt:has_timer(akm_write_add_timer) then
-    akm_write()
-    rnt:remove_timer(akm_write_add_timer)
-  end
-end
 
 ------ Pads (Bank A). Unused since they don't consume MIDI events and only come from (MIDI) device.
 
@@ -484,78 +382,10 @@ end
 
 --- ---transport controls (1:rewind, 2:fast_forward, 3:stop, 4:play/pause, 5:record, 6:loop)
 --1 previous track
-local function akm_rewind()
-  if (AKM_TRK_REPEAT[3]) then
-    song:select_previous_track()
-  end
-  if (song.selected_track_index==1) then
-    AKM_TRK_REPEAT[3]=false
-  end
-end
 
-local function akm_rewind_repeat(release)
-  if not release then
-    if rnt:has_timer(akm_rewind_repeat) then
-      rnt:remove_timer(akm_rewind_repeat)
-      if not (rnt:has_timer(akm_rewind)) then
-        rnt:add_timer(akm_rewind,AKM_TRK_REPEAT[1])
-      end
-    else
-      if rnt:has_timer(akm_rewind_repeat) then
-        rnt:remove_timer(akm_rewind_repeat)
-      elseif rnt:has_timer(akm_rewind) then
-        rnt:remove_timer(akm_rewind)
-      end
-      AKM_TRK_REPEAT[3]=true
-      akm_rewind()
-      rnt:add_timer(akm_rewind_repeat,AKM_TRK_REPEAT[2])
-    end
-    vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[25]
-  else
-    if rnt:has_timer(akm_rewind_repeat) then
-      rnt:remove_timer(akm_rewind_repeat)
-    elseif rnt:has_timer(akm_rewind) then
-      rnt:remove_timer(akm_rewind)
-    end
-  end
-end
 
 --2 next track
-local function akm_forward()
-  if (AKM_TRK_REPEAT[4]) then
-    song:select_next_track()
-  end
-  if (song.selected_track_index==#song.tracks) then
-    AKM_TRK_REPEAT[4]=false
-  end
-end
 
-local function akm_forward_repeat(release)
-  if not release then
-    if rnt:has_timer(akm_forward_repeat) then
-      rnt:remove_timer(akm_forward_repeat)
-      if not (rnt:has_timer(akm_forward)) then
-        rnt:add_timer(akm_forward,AKM_TRK_REPEAT[1])
-      end
-    else
-      if rnt:has_timer(akm_forward_repeat) then
-        rnt:remove_timer(akm_forward_repeat)
-      elseif rnt:has_timer(akm_forward) then
-        rnt:remove_timer(akm_forward)
-      end
-      AKM_TRK_REPEAT[4]=true
-      akm_forward()
-      rnt:add_timer(akm_forward_repeat,AKM_TRK_REPEAT[2])
-    end
-    vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[26]
-  else
-    if rnt:has_timer(akm_forward_repeat) then
-      rnt:remove_timer(akm_forward_repeat)
-    elseif rnt:has_timer(akm_forward) then
-      rnt:remove_timer(akm_forward)
-    end
-  end
-end
 
 --3 stop song (& panic)
 
@@ -571,88 +401,12 @@ end
 
 --- ---browses center controls (1:center knob left, 2:center knob right, 3:center knob button | 1:left arrow, 2:right arrow)
 --1 left button --> (previous pattern sequence)
-local function akm_left_button()
-  if (AKM_SEQ_REPEAT[3]) then
-    if (song.selected_sequence_index>1) then
-      song.selected_sequence_index=song.selected_sequence_index-1
-    else
-      song.selected_sequence_index=#song.sequencer.pattern_sequence
-    end
-  end
-  if (song.selected_sequence_index==1) then
-    AKM_SEQ_REPEAT[3]=false
-  end
-end
 
-local function akm_left_button_repeat(release)
-  if not release then
-    if rnt:has_timer(akm_left_button_repeat) then
-      rnt:remove_timer(akm_left_button_repeat)
-      if not (rnt:has_timer(akm_left_button)) then
-        rnt:add_timer(akm_left_button,AKM_SEQ_REPEAT[1])
-      end
-    else
-      if rnt:has_timer(akm_left_button_repeat) then
-        rnt:remove_timer(akm_left_button_repeat)
-      elseif rnt:has_timer(akm_left_button) then
-        rnt:remove_timer(akm_left_button)
-      end
-      AKM_SEQ_REPEAT[3]=true
-      akm_left_button()
-      rnt:add_timer(akm_left_button_repeat,AKM_SEQ_REPEAT[2])
-    end
-    vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[35]
-  else
-    if rnt:has_timer(akm_left_button_repeat) then
-      rnt:remove_timer(akm_left_button_repeat)
-    elseif rnt:has_timer(akm_left_button) then
-      rnt:remove_timer(akm_left_button)
-    end
-  end
-end
 
 
 
 --2 right button --> (next pattern sequence)
-local function akm_right_button()
-  if (AKM_SEQ_REPEAT[4]) then
-    if (song.selected_sequence_index<#song.sequencer.pattern_sequence) then
-      song.selected_sequence_index=song.selected_sequence_index+1
-    else
-      song.selected_sequence_index=1
-    end
-  end
-  if (song.selected_sequence_index==#song.sequencer.pattern_sequence) then
-    AKM_SEQ_REPEAT[4]=false
-  end
-end
 
-local function akm_right_button_repeat(release)
-  if not release then
-    if rnt:has_timer(akm_right_button_repeat) then
-      rnt:remove_timer(akm_right_button_repeat)
-      if not (rnt:has_timer(akm_right_button)) then
-        rnt:add_timer(akm_right_button,AKM_SEQ_REPEAT[1])
-      end
-    else
-      if rnt:has_timer(akm_right_button_repeat) then
-        rnt:remove_timer(akm_right_button_repeat)
-      elseif rnt:has_timer(akm_right_button) then
-        rnt:remove_timer(akm_right_button)
-      end
-      AKM_SEQ_REPEAT[4]=true
-      akm_right_button()
-      rnt:add_timer(akm_right_button_repeat,AKM_SEQ_REPEAT[2])
-    end
-    vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[36]
-  else
-    if rnt:has_timer(akm_right_button_repeat) then
-      rnt:remove_timer(akm_right_button_repeat)
-    elseif rnt:has_timer(akm_right_button) then
-      rnt:remove_timer(akm_right_button)
-    end
-  end
-end
 
 
 
@@ -674,88 +428,12 @@ AKM_WINDOW_FRAME=3
 
 --- ---live/bank circular buttons
 --1 previous line
-local function akm_live_part_1()
-  local value=-1
-  local sli=song.selected_line_index
-  local nol=song.selected_pattern.number_of_lines
-  if (1<=sli+value) then
-    song.selected_line_index=sli+value
-  else
-    if (song.selected_sequence_index-1>=1) then
-      song.selected_sequence_index=song.selected_sequence_index-1
-      song.selected_line_index=song.selected_pattern.number_of_lines
-    end
-  end
-end
 
-local function akm_live_part_1_repeat(release)
-  if not release then
-    if rnt:has_timer(akm_live_part_1_repeat) then
-      rnt:remove_timer(akm_live_part_1_repeat)
-      if not (rnt:has_timer(akm_live_part_1)) then
-        rnt:add_timer(akm_live_part_1,AKM_LNE_REPEAT[1])
-      end
-    else
-      if rnt:has_timer(akm_live_part_1_repeat) then
-        rnt:remove_timer(akm_live_part_1_repeat)
-      elseif rnt:has_timer(akm_live_part_1) then
-        rnt:remove_timer(akm_live_part_1)
-      end
-      akm_live_part_1()
-      rnt:add_timer(akm_live_part_1_repeat,AKM_LNE_REPEAT[2])
-    end
-    vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[46]
-  else
-    if rnt:has_timer(akm_live_part_1_repeat) then
-      rnt:remove_timer(akm_live_part_1_repeat)
-    elseif rnt:has_timer(akm_live_part_1) then
-      rnt:remove_timer(akm_live_part_1)
-    end
-  end
-end
 
 
 
 --2 next line
-local function akm_live_part_2()
-  local value=1
-  local sli=song.selected_line_index
-  local nol=song.selected_pattern.number_of_lines
-  if (nol>=sli+value) then
-    song.selected_line_index=sli+value
-  else
-    if (song.selected_sequence_index+1<=#song.sequencer.pattern_sequence) then
-      song.selected_sequence_index=song.selected_sequence_index+1
-      song.selected_line_index=1
-    end
-  end
-end
 
-local function akm_live_part_2_repeat(release)
-  if not release then
-    if rnt:has_timer(akm_live_part_2_repeat) then
-      rnt:remove_timer(akm_live_part_2_repeat)
-      if not (rnt:has_timer(akm_live_part_2)) then
-        rnt:add_timer(akm_live_part_2,AKM_LNE_REPEAT[1])
-      end
-    else
-      if rnt:has_timer(akm_live_part_2_repeat) then
-        rnt:remove_timer(akm_live_part_2_repeat)
-      elseif rnt:has_timer(akm_live_part_2) then
-        rnt:remove_timer(akm_live_part_2)
-      end
-      akm_live_part_2()
-      rnt:add_timer(akm_live_part_2_repeat,AKM_LNE_REPEAT[2])
-    end
-    vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[47]
-  else
-    if rnt:has_timer(akm_live_part_2_repeat) then
-      rnt:remove_timer(akm_live_part_2_repeat)
-    elseif rnt:has_timer(akm_live_part_2) then
-      rnt:remove_timer(akm_live_part_2)
-    end
-  end
-end
 
 
 
@@ -979,220 +657,17 @@ rnt.app_new_document_observable:add_notifier(akm_essential_attach_led_observers)
 akm_essential_attach_led_observers()
 
 
-local akm_tbl_rules={
-  --track controls
-  
-  {{0x90,0x4A,0x7F}, "read_on"},
-  {{0x90,0x4A,0x00}, "read_off"},
-  
-  {{0x90,0x4B,0x7F}, "write_on"},
-  {{0x90,0x4B,0x00}, "write_off"},
-
-  --global controls
-  {{0x90,0x50,0x7F}, "save_on"},
-  {{0x90,0x50,0x00}, "save_off"},
-  
-  {{0x90,0x57,0x7F}, "in_on"},
-  {{0x90,0x57,0x00}, "in_off"},
-  
-  {{0x90,0x58,0x7F}, "out_on"},
-  {{0x90,0x58,0x00}, "out_off"},
-  
-  --[[
-  {{0x90,0x59,0x7F}, "metro_on"},
-  {{0x90,0x59,0x00}, "metro_off"},
-    ]]
-  {{0x90,0x51,0x7F}, "undo_on"},
-  {{0x90,0x51,0x00}, "undo_off"},
-
-  {{0x90,0x52,0x7F}, "redo_on"},
-  {{0x90,0x52,0x00}, "redo_off"},
-
-  {{0x90,0x53,0x7F}, "quantize_on"},
-  {{0x90,0x53,0x00}, "quantize_off"},
-
-  --transport
-  {{0x90,0x5B,0x7F}, "rewind_on"},
-  {{0x90,0x5B,0x00}, "rewind_off"},
-
-  {{0x90,0x5C,0x7F}, "forward_on"},
-  {{0x90,0x5C,0x00}, "forward_off"},
-
-  {{0x90,0x5D,0x7F}, "stop_on"},
-  {{0x90,0x5D,0x00}, "stop_off"},
-  
-  --[[
-  {{0x90,0x5E,0x7F}, "play_on"},
-  {{0x90,0x5E,0x00}, "play_off"},
-
-  {{0x90,0x5F,0x7F}, "rec_on"},
-  {{0x90,0x5F,0x00}, "rec_off"},
-
-  {{0x90,0x56,0x7F}, "loop_on"},
-  {{0x90,0x56,0x00}, "loop_off"},
-  ]]
-  
-  --browses center controls
-  {{0x90,0x54,0x7F}, "dial_button_on"},
-  {{0x90,0x54,0x00}, "dial_button_off"},
-  
-  --live/bank circular buttons
-  {{0x90,0x31,0x7F}, "live_part_1_on"},
-  {{0x90,0x31,0x00}, "live_part_1_off"},
-
-  {{0x90,0x30,0x7F}, "live_part_2_on"},
-  {{0x90,0x30,0x00}, "live_part_2_off"},
-  
-  {{0x90,0x2F,0x7F}, "bank_next_on"},
-  {{0x90,0x2F,0x00}, "bank_next_off"},
-  
-  {{0x90,0x2E,0x7F}, "bank_previous_on"},
-  {{0x90,0x2E,0x00}, "bank_previous_off"},
-  
-  --filter/select buttons
-  {{0x90,0x18,0x7F}, "select_btn1_on"},
-  {{0x90,0x18,0x00}, "select_btn1_off"},
-  
-  {{0x90,0x19,0x7F}, "select_btn2_on"},
-  {{0x90,0x19,0x00}, "select_btn2_off"},
-  
-  {{0x90,0x1A,0x7F}, "select_btn3_on"},
-  {{0x90,0x1A,0x00}, "select_btn3_off"},
-  
-  {{0x90,0x1B,0x7F}, "select_btn4_on"},
-  {{0x90,0x1B,0x00}, "select_btn4_off"},
-  
-  {{0x90,0x1C,0x7F}, "select_btn5_on"},
-  {{0x90,0x1C,0x00}, "select_btn5_off"},
-  
-  {{0x90,0x1D,0x7F}, "select_btn6_on"},
-  {{0x90,0x1D,0x00}, "select_btn6_off"},
-  
-  {{0x90,0x1E,0x7F}, "select_btn7_on"},
-  {{0x90,0x1E,0x00}, "select_btn7_off"},
-  
-  {{0x90,0x1F,0x7F}, "select_btn8_on"},
-  {{0x90,0x1F,0x00}, "select_btn8_off"},
-}
 
 
 
-local function akm_x3_sel_leds(num)
-  local led={1,3,5,7,9,11,13,15}
-  local time={200,120,3}
-  local function led_off()
-    if (AKM_MIDI_DEVICE_OUT) then
-      AKM_MIDI_DEVICE_OUT:send(akm_tbl_rules[led[num]+33][1])
-      AKM_MIDI_DEVICE_OUT:send(akm_tbl_rules[led[num]+17][1])
-      AKM_MIDI_DEVICE_OUT:send(akm_tbl_rules[led[num]+1][1])
-    end
-    for sel=1,3 do
-      vws[("AKM_BTT_DAW_A_%s"):format(sel)].color=AKM_CLR.DEFAULT
-    end
-  end
-  local function led_on()
-    if (AKM_MIDI_DEVICE_OUT) then
-      AKM_MIDI_DEVICE_OUT:send(akm_tbl_rules[led[num]+32][1])
-      AKM_MIDI_DEVICE_OUT:send(akm_tbl_rules[led[num]+16][1])
-      AKM_MIDI_DEVICE_OUT:send(akm_tbl_rules[led[num]][1])
-    end
-    for sel=1,3 do
-      vws[("AKM_BTT_DAW_A_%s"):format(sel)].color=AKM_CLR.MARKER
-    end  
-  end
-
-  local function step_4()
-    led_off()
-    if rnt:has_timer(step_4) then
-      rnt:remove_timer(step_4)
-    end
-    --[[
-    if not rnt:has_timer(step_5) then
-      rnt:add_timer(step_5,time[2])
-    end
-    ]]
-  end  
-  local function step_3()
-    led_on()
-    if rnt:has_timer(step_3) then
-      rnt:remove_timer(step_3)
-    end
-    if not rnt:has_timer(step_4) then
-      rnt:add_timer(step_4,time[2])
-    end
-  end
-  local function step_2()
-    led_off()
-    if rnt:has_timer(step_2) then
-      rnt:remove_timer(step_2)
-    end
-    if not rnt:has_timer(step_3) then
-      rnt:add_timer(step_3,time[2])
-    end
-  end
-  local function step_1()
-    led_on()
-    if rnt:has_timer(step_1) then
-      rnt:remove_timer(step_1)
-    end  
-    if not rnt:has_timer(step_2) then
-      rnt:add_timer(step_2,time[2])
-    end
-  end
-  local function launch()
-    if not rnt:has_timer(step_1) then
-      rnt:add_timer(step_1,time[1])
-    end
-  end
-  return launch()
-end
 
 --state x3 buttons
-local function akm_state_select(num)
-end
 
 --general functions
-local function akm_fun_gen(rule)
-  --print("rule:",rule)
-  if (rule=="save_on") then vws.AKM_BTT_DAW_A_6.color=AKM_CLR.MARKER return akm_save_on() end
-  if (rule=="save_off") then vws.AKM_BTT_DAW_A_6.color=AKM_CLR.DEFAULT return akm_save_off() end
-
-  if (rule=="undo_on") then vws.AKM_BTT_DAW_A_7.color=AKM_CLR.MARKER return end
-  if (rule=="undo_off") then vws.AKM_BTT_DAW_A_7.color=AKM_CLR.DEFAULT return akm_in() end
-
-  if (rule=="redo_on") then vws.AKM_BTT_DAW_A_8.color=AKM_CLR.MARKER return end
-  if (rule=="redo_off") then vws.AKM_BTT_DAW_A_8.color=AKM_CLR.DEFAULT return akm_out() end
-
-  if (rule=="stop_on") then vws.AKM_BTT_DAW_B_3.color=AKM_CLR.MARKER AKM_STOP_STATUS=true return akm_stop() end
-  if (rule=="stop_off") then vws.AKM_BTT_DAW_B_3.color=AKM_CLR.DEFAULT AKM_STOP_STATUS=false end
-  
-  if (rule=="live_part_1_on") then vws.AKM_PN_UP_DOWN_2.visible=false vws.AKM_PN_UP_DOWN_1.visible=true vws.AKM_BTT_LIVE_1.color=AKM_CLR.MARKER return akm_live_part_1_repeat() end
-  if (rule=="live_part_1_off") then vws.AKM_PN_UP_DOWN_2.visible=false vws.AKM_PN_UP_DOWN_1.visible=true vws.AKM_BTT_LIVE_1.color=AKM_CLR.DEFAULT return akm_live_part_1_repeat(true) end
-
-  if (rule=="live_part_2_on") then vws.AKM_PN_UP_DOWN_2.visible=false vws.AKM_PN_UP_DOWN_1.visible=true vws.AKM_BTT_LIVE_2.color=AKM_CLR.MARKER return akm_live_part_2_repeat() end
-  if (rule=="live_part_2_off") then vws.AKM_PN_UP_DOWN_2.visible=false vws.AKM_PN_UP_DOWN_1.visible=true vws.AKM_BTT_LIVE_2.color=AKM_CLR.DEFAULT return akm_live_part_2_repeat(true) end
-  
-  if (rule=="bank_next_on") then vws.AKM_PN_UP_DOWN_1.visible=false vws.AKM_PN_UP_DOWN_2.visible=true vws.AKM_BTT_BANK_1.color=AKM_CLR.MARKER return akm_bank_next_repeat() end
-  if (rule=="bank_next_off") then vws.AKM_PN_UP_DOWN_1.visible=false vws.AKM_PN_UP_DOWN_2.visible=true vws.AKM_BTT_BANK_1.color=AKM_CLR.DEFAULT return akm_bank_next_repeat(true) end
-
-  if (rule=="bank_previous_on") then vws.AKM_PN_UP_DOWN_1.visible=false vws.AKM_PN_UP_DOWN_2.visible=true vws.AKM_BTT_BANK_2.color=AKM_CLR.MARKER return akm_bank_previous_repeat() end
-  if (rule=="bank_previous_off") then vws.AKM_PN_UP_DOWN_1.visible=false vws.AKM_PN_UP_DOWN_2.visible=true vws.AKM_BTT_BANK_2.color=AKM_CLR.DEFAULT return akm_bank_previous_repeat(true) end
-  
-end
 
 -------------------------------------------------------------------------------------------------
 --keylab mk3 49. rules
 -------------------------------------------------------------------------------------------------
-local function akm_fun_rules(r)
-  for i=1,#akm_tbl_rules do
-    if (r==i) then
-      akm_output_midi_invoke(akm_tbl_rules[i])
-      akm_fun_gen(akm_tbl_rules[i][2])
-      --print("------>",i)
-      break
-    end
-  end
-end
 
 -------------------------------------------------------------------------------------------------
 --midi functions
@@ -1213,14 +688,6 @@ local function akm_input_midi(in_device_name)
       assert(#message>=1)
       for i=1,#message do assert(message[i]>=0 and message[i]<=0xFF) end
 
-      --- ---pressed & released (led)
-      for r=1,#akm_tbl_rules do
-        local rule=akm_tbl_rules[r][1]
-        if (message[1]==rule[1] and message[2]==rule[2] and message[3]==rule[3]) then
-          return akm_fun_rules(r)
-        end          
-      end
-      
       --- ---invoke commands
       --pads (Essential mk3: note = 39+pad# on bank A, 47+pad# on bank B)
       if (message[1]==0x99 and message[2]==40) then return akm_pad1() end
@@ -1757,11 +1224,6 @@ function akm_on_off()
     vws.AKM_BT_ON_OFF.color=AKM_CLR.DEFAULT
     AKM_ON_OFF=false
     AKM_ACTIVATE=false
-    --abort repetitions
-    akm_rewind_repeat(true)
-    akm_forward_repeat(true)
-    akm_left_button_repeat(true)
-    akm_right_button_repeat(true)
     AKM_STOP_STATUS=false
   else
     akm_check_midi_on()
@@ -4142,20 +3604,20 @@ function akm_previous_nc_ec()
       if (song.selected_note_column) then
         if (song.selected_note_column_index>1) then
           song.selected_note_column_index=song.selected_note_column_index-1
-          vws.AKM_ROT_8.value=math.floor((song.selected_note_column_index-1)*127/(song.selected_track.visible_note_columns+song.selected_track.visible_effect_columns))
+          vws.AKM_ROT_8.value=math.min(127,math.max(0,math.floor((song.selected_note_column_index-1)*127/(song.selected_track.visible_note_columns+song.selected_track.visible_effect_columns))))
           vws.AKM_TXT_DIGITAL_2.text=("Note Column %s"):format(song.selected_note_column_index)
         end
       else
         if (song.selected_effect_column_index>1) then
           song.selected_effect_column_index=song.selected_effect_column_index-1
-          vws.AKM_ROT_8.value=math.floor((song.selected_effect_column_index-1+song.selected_track.visible_note_columns)*127/(song.selected_track.visible_note_columns+song.selected_track.visible_effect_columns))
+          vws.AKM_ROT_8.value=math.min(127,math.max(0,math.floor((song.selected_effect_column_index-1+song.selected_track.visible_note_columns)*127/(song.selected_track.visible_note_columns+song.selected_track.visible_effect_columns))))
           vws.AKM_TXT_DIGITAL_2.text=("Effect Column %s"):format(song.selected_effect_column_index)
         end
       end
     else
       if (song.selected_effect_column_index>1) then
         song.selected_effect_column_index=song.selected_effect_column_index-1
-        vws.AKM_ROT_8.value=math.floor((song.selected_effect_column_index-1+song.selected_track.visible_note_columns)*127/(song.selected_track.visible_note_columns+song.selected_track.visible_effect_columns))
+        vws.AKM_ROT_8.value=math.min(127,math.max(0,math.floor((song.selected_effect_column_index-1+song.selected_track.visible_note_columns)*127/(song.selected_track.visible_note_columns+song.selected_track.visible_effect_columns))))
         vws.AKM_TXT_DIGITAL_2.text=("Effect Column %s"):format(song.selected_effect_column_index)
       end
     end
@@ -4175,7 +3637,7 @@ function akm_next_nc_ec()
         end
         if (song.selected_note_column_index<song.selected_track.visible_note_columns) then
           song.selected_note_column_index=song.selected_note_column_index+1
-          vws.AKM_ROT_8.value=math.floor((song.selected_note_column_index+1)*127/(song.selected_track.visible_note_columns+song.selected_track.visible_effect_columns))
+          vws.AKM_ROT_8.value=math.min(127,math.max(0,math.floor((song.selected_note_column_index+1)*127/(song.selected_track.visible_note_columns+song.selected_track.visible_effect_columns))))
           vws.AKM_TXT_DIGITAL_2.text=("Note Column %s"):format(song.selected_note_column_index)
         end
       else
@@ -4184,7 +3646,7 @@ function akm_next_nc_ec()
         end
         if (song.selected_effect_column_index<song.selected_track.visible_effect_columns) then
           song.selected_effect_column_index=song.selected_effect_column_index+1
-          vws.AKM_ROT_8.value=math.floor((song.selected_effect_column_index+1+song.selected_track.visible_note_columns)*127/(song.selected_track.visible_note_columns+song.selected_track.visible_effect_columns))
+          vws.AKM_ROT_8.value=math.min(127,math.max(0,math.floor((song.selected_effect_column_index+1+song.selected_track.visible_note_columns)*127/(song.selected_track.visible_note_columns+song.selected_track.visible_effect_columns))))
           vws.AKM_TXT_DIGITAL_2.text=("Effect Column %s"):format(song.selected_effect_column_index)
         end
       end
@@ -4194,7 +3656,7 @@ function akm_next_nc_ec()
       end
       if (song.selected_effect_column_index<song.selected_track.visible_effect_columns) then
         song.selected_effect_column_index=song.selected_effect_column_index+1
-        vws.AKM_ROT_8.value=math.floor((song.selected_effect_column_index+1+song.selected_track.visible_note_columns)*127/(song.selected_track.visible_note_columns+song.selected_track.visible_effect_columns))
+        vws.AKM_ROT_8.value=math.min(127,math.max(0,math.floor((song.selected_effect_column_index+1+song.selected_track.visible_note_columns)*127/(song.selected_track.visible_note_columns+song.selected_track.visible_effect_columns))))
         vws.AKM_TXT_DIGITAL_2.text=("Effect Column %s"):format(song.selected_effect_column_index)
       end
     end
