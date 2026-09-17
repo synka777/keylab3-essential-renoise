@@ -1,5 +1,58 @@
 --
--- Arturia KeyLab Mk3 (AKM)
+-- Arturia KeyLab Essential mk3 (AKM) - Renoise Tool
+-- Fork of the original Arturia KeyLab mk3 (Pro-line) tool by foma / ulneiz,
+-- reworked specifically for the Essential 49/61/88 mk3, which uses a genuinely
+-- different MIDI protocol from the Pro-line hardware the original tool targeted.
+--
+-- READ THIS FIRST if you're new to this file:
+--
+-- 1) SINGLE FILE ON PURPOSE.
+--    This used to be split into akm.lua + akm_actions.lua (loaded via two
+--    require() calls in main.lua). That split caused an unresolved cross-file
+--    load-order bug: some functions defined in the second file weren't yet
+--    visible as globals by the time GUI widgets in the first file tried to use
+--    them at construction time (fader tostring/tonumber callbacks). Recombining
+--    into one file fixed it immediately. Don't re-split without understanding
+--    why that happened - see the git history around that point for the details.
+--
+-- 2) Essential mk3 sends plain Control Change (0xB0) messages for transport,
+--    knobs, faders, and dial - NOT the Note-On (0x90) messages the Pro-line
+--    hardware uses. Its pads are Note-On on MIDI channel 10 though. All of this
+--    arrives on ONE plain MIDI port ("... mk3 MIDI"), not a separate DAW port -
+--    the MCU/HUI port this device also exposes stays completely silent and is
+--    not used by this tool at all. See midi_callback (search "local function
+--    midi_callback") for the actual dispatch table this drives.
+--
+-- 3) TWO DIFFERENT KNOB BEHAVIOURS, ON PURPOSE:
+--    - Knobs that pick a VALUE FROM A RANGE (note, instrument, volume, panning,
+--      delay, fx-val, fx-amount) use DIRECT POSITION MAPPING: the knob's raw
+--      0-127 reading maps straight onto the target's range every time
+--      (akm_knob_*_val functions). This is deliberate - an earlier version used
+--      relative step-counting (turn = +1/-1) and it got stuck whenever the
+--      physical knob hit its own firmware limit (0 or 127), since turning
+--      further past that point produces no new MIDI data at all to react to.
+--    - Knobs that perform a RELATIVE MOVE with no sensible "position" concept
+--      (NC/EC column navigation, step-length) still use step-counting
+--      (akm_knob_dir + previous/next pairs) because there's nothing to map a
+--      knob position onto. These two still exhibit the "stuck at the physical
+--      limit until you reverse" behaviour - that's an accepted, understood
+--      limitation, not a bug to chase.
+--
+-- 4) LED FEEDBACK (Play/Rec/Loop/Quant/Part/Tap) needs a one-time "DAW connect"
+--    SysEx handshake before the device will accept LED colour commands at all
+--    (akm_essential_daw_connect, sent automatically on first use). LEDs are
+--    kept in sync via Renoise's *_observable properties (akm_essential_attach_led_observers),
+--    not by only updating on button press - that way they stay correct even if
+--    you change state with the mouse instead of the hardware.
+--
+-- 5) Renoise's Lua sandbox caps a single chunk at 200 top-level locals. All
+--    action functions here are plain globals (no "local") specifically to stay
+--    well under that ceiling as the tool grows - keep doing that for new
+--    top-level functions rather than reaching for "local function".
+--
+-- 6) The dead Pro-line-only subsystem (note-based button/LED rules, akm_tbl_rules,
+--    akm_fun_gen/akm_fun_rules, rewind/forward/live-part/read/write buttons) has
+--    been removed entirely - none of it is reachable from Essential mk3 hardware.
 --
 
 ----------------------------------------
@@ -587,6 +640,9 @@ end
 
 AKM_ESSENTIAL_DAW_CONNECTED=false
 
+-- One-time SysEx handshake the Essential mk3 requires before it will accept ANY
+-- LED colour command. Called automatically by akm_essential_set_led below - you
+-- shouldn't need to call this directly.
 function akm_essential_daw_connect()
   if not (AKM_ESSENTIAL_DAW_CONNECTED) and (AKM_MIDI_DEVICE_OUT and AKM_MIDI_DEVICE_OUT.is_open) then
     AKM_MIDI_DEVICE_OUT:send({0xF0,0x00,0x20,0x6B,0x7F,0x42,0x02,0x0F,0x40,0x5A,0x01,0xF7})
@@ -594,6 +650,9 @@ function akm_essential_daw_connect()
   end
 end
 
+-- Sets one hardware button's LED to an RGB colour (0-0x7F per channel).
+-- button_id is the device's own LED-addressing id (NOT the CC number the
+-- button sends when pressed - those are two separate numbering schemes).
 function akm_essential_set_led(button_id,r,g,b)
   if (AKM_MIDI_DEVICE_OUT and AKM_MIDI_DEVICE_OUT.is_open) then
     akm_essential_daw_connect()
@@ -601,6 +660,12 @@ function akm_essential_set_led(button_id,r,g,b)
   end
 end
 
+-- akm_essential_*_led_sync: one per LED-backed toggle (Play/Rec/Loop/Mixer).
+-- These are attached as notifiers on the real Renoise property (see
+-- akm_essential_attach_led_observers below) rather than only being called from
+-- the button-press functions, so the LED stays correct even if the state
+-- changes some other way (mouse, keyboard shortcut, song reaching that state
+-- on its own).
 function akm_essential_play_led_sync()
   if (song.transport.playing) then
     akm_essential_set_led(0x15,0x00,0x7F,0x00)
@@ -634,6 +699,11 @@ function akm_essential_mixer_led_sync()
   end
 end
 
+-- Attaches the four LED-sync functions above as permanent notifiers on the
+-- real Renoise properties. Called once at load and again on every new-song
+-- event (see the app_new_document_observable hook further down) since a fresh
+-- song document needs its own notifiers re-attached. Safe to call repeatedly -
+-- has_notifier guards against attaching the same one twice.
 function akm_essential_attach_led_observers()
   if (song and song.transport) then
     if not (song.transport.playing_observable:has_notifier(akm_essential_play_led_sync)) then
@@ -672,6 +742,14 @@ akm_essential_attach_led_observers()
 -------------------------------------------------------------------------------------------------
 --midi functions
 -------------------------------------------------------------------------------------------------
+-- This is the heart of the tool: akm_input_midi opens the raw MIDI input device
+-- and installs midi_callback below as its handler. Every message from the
+-- keyboard passes through midi_callback's long if/then chain, matched by exact
+-- status byte + CC/note number. This is a completely separate, parallel
+-- listener from Renoise's own "Preferences > MIDI" input on the same port -
+-- see the "Ignore specific controllers" setup step for why that matters
+-- (both listeners see every message; Renoise's own one will happily record
+-- unmapped CCs into the pattern as raw effect commands unless told not to).
 local AKM_MIDI_DEVICE_IN=nil
 
 local function akm_input_midi(in_device_name)
@@ -683,6 +761,9 @@ local function akm_input_midi(in_device_name)
       return
     end
 
+    -- akm_knob_last: remembers each knob's previous raw reading so akm_knob_dir
+    -- (used only by the two relative-movement knobs, NC/EC-nav and step-length -
+    -- see the file header) can tell which direction it moved.
     local akm_knob_last = {}
     local function midi_callback(message)
       assert(#message>=1)
@@ -736,7 +817,13 @@ local function akm_input_midi(in_device_name)
       if (message[1]==0xB0 and message[2]==116 and message[3]<=0x40) then return akm_right_dial() end
       
       --Essential mk3 knobs send ABSOLUTE 0-127 values (CC 96-104), not relative turns.
-      --This tracks the last value per knob and derives a direction from it.
+      --This tracks the last value per knob and derives a direction from it. Only
+      --used by knobs 8 (NC/EC nav) and 9 (step length) now - every other knob
+      --was converted to direct position-mapping (akm_knob_*_val functions
+      --below) once we found this approach gets stuck at the knob's own 0/127
+      --firmware limit until you reverse direction. The delta wraparound
+      --correction (+-128) below is a safety net for endless/continuous
+      --encoders that roll over; it's a no-op for a normal bounded turn.
       local function akm_knob_dir(cc, value, prev_fn, next_fn)
         local last = akm_knob_last[cc]
         akm_knob_last[cc] = value
@@ -2177,6 +2264,14 @@ end
 -------------------------------------------------------------------------------------------------
 --one-time setup reminder for KeyLab Essential mk3 (Renoise can't be configured from a script)
 -------------------------------------------------------------------------------------------------
+-- Shown once ever (tracked in renoise.tool().preferences, see top of file).
+-- Exists because two things this hardware needs are genuinely NOT settable via
+-- the Lua API - Preferences > MIDI > "Ignore specific controllers" (global app
+-- setting) and an instrument's MIDI Input > Channel (per-instrument setting).
+-- Without the first, Renoise records every unmapped button/knob CC straight
+-- into the pattern as a raw effect command while Edit Mode is on. Without the
+-- second, pads (which are on MIDI channel 10) get recorded as real notes on
+-- whatever instrument you're playing.
 local function akm_essential_first_run_setup()
   if (renoise.tool().preferences.essential_setup_shown.value) then return end
 
@@ -2283,10 +2378,12 @@ end
 --rprint(_G)
 
 -----------------------------------------------------------------------------------------------
--- Arturia KeyLab Essential mk3 (AKM) - action functions
--- Everything that happens when a pad/knob/fader/transport button is pressed or turned.
--- Loaded by main.lua alongside akm.lua. All functions here are plain globals (not local)
--- so akm.lua's midi_callback can call them directly across the file boundary.
+-- ACTION FUNCTIONS
+-- Everything from here on is "what happens when a pad/knob/fader/transport
+-- button is pressed or turned" - the functions midi_callback (up near the top
+-- of this file, search "local function midi_callback") actually calls.
+-- All plain globals rather than "local function" - see point 5 in the file
+-- header for why (Lua's 200-local-per-chunk limit).
 -----------------------------------------------------------------------------------------------
 
 function akm_tap_led_dim_callback()
@@ -2297,6 +2394,11 @@ function akm_tap_led_dim_callback()
 end
 
 
+-- Tap the button in rhythm to set song.transport.bpm. Averages the last 4
+-- gaps between taps (steadier than using only the single most recent gap),
+-- and resets if you pause more than 2 seconds so an accidental long gap isn't
+-- read as one very slow beat. Needs at least 2 taps before any BPM is set -
+-- the first tap only marks a starting point.
 function akm_tap_tempo()
   akm_essential_set_led(0x17,0x7F,0x7F,0x7F)
   if (renoise.tool():has_timer(akm_tap_led_dim_callback)) then
@@ -3598,6 +3700,12 @@ function akm_knob_fx_amo_val(raw)
 end
 
 
+-- NC/EC column navigation. Note: the widget-fill math below scales against
+-- this TRACK's actual visible_note_columns/visible_effect_columns (not a fixed
+-- assumption) so it stays correct on tracks with fewer columns than the
+-- hardware max. It's wrapped in math.min/max clamps because that scaling can
+-- push slightly past the widget's valid 0-127 range right at the top end -
+-- learned that the hard way, don't remove the clamps.
 function akm_previous_nc_ec()
   if (AKM_VAL_LOCK[8]) then
     if (song.selected_track.type==renoise.Track.TRACK_TYPE_SEQUENCER) then
