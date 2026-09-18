@@ -804,8 +804,8 @@ local function akm_input_midi(in_device_name)
         end
         return
       end
-      if (message[1]==0xB0 and message[2]==25 and message[3]==0x00) then return akm_undo() end
-      if (message[1]==0xB0 and message[2]==26 and message[3]==0x00) then return akm_undo() end
+      if (message[1]==0xB0 and message[2]==25 and message[3]==0x00) then return akm_pad6() end --previous track
+      if (message[1]==0xB0 and message[2]==26 and message[3]==0x00) then return akm_pad7() end --next track
       --dedicated Undo/Redo buttons -> real Renoise undo/redo
       if (message[1]==0xB0 and message[2]==42 and message[3]==0x00) then return akm_song_undo() end
       if (message[1]==0xB0 and message[2]==43 and message[3]==0x00) then return akm_song_redo() end
@@ -1159,15 +1159,11 @@ local function akm_ntf_metro()
 end
 
 local function akm_ntf_follow()
-  -- local undo_on={{0x90,0x51,0x7F}, "undo_on"}
-  -- local undo_off={{0x90,0x51,0x00}, "undo_off"}
-  -- if (song.transport.follow_player) then
-  --   akm_output_midi_invoke(undo_on)
-  --   vws.AKM_BTT_DAW_A_10.color=AKM_CLR.MARKER
-  -- else
-  --   akm_output_midi_invoke(undo_off)
-  --   vws.AKM_BTT_DAW_A_10.color=AKM_CLR.DEFAULT
-  -- end
+  if (song.transport.follow_player) then
+    vws.AKM_BTT_DAW_A_10.color=AKM_CLR.MARKER
+  else
+    vws.AKM_BTT_DAW_A_10.color=AKM_CLR.DEFAULT
+  end
 end
 
 local function akm_ntf_middle_frame()
@@ -1282,10 +1278,6 @@ local function akm_restore_controls()
   -- vws.AKM_BTT_LEFT.color=AKM_CLR.DEFAULT
   -- vws.AKM_BTT_RIGHT.color=AKM_CLR.DEFAULT
   vws.AKM_ROT_DIAL.visible=true
-  vws.AKM_BTT_LIVE_1.color=AKM_CLR.DEFAULT
-  vws.AKM_BTT_LIVE_2.color=AKM_CLR.DEFAULT
-  vws.AKM_BTT_BANK_1.color=AKM_CLR.DEFAULT
-  vws.AKM_BTT_BANK_2.color=AKM_CLR.DEFAULT
   
   for num=6,10 do
     vws[("AKM_BTT_DAW_A_%s"):format(num)].color=AKM_CLR.DEFAULT
@@ -1561,8 +1553,8 @@ local function akm_mp_daw()
   class "Akm_Button_B"
   function Akm_Button_B:__init(num)
     local tbl_tlt_b={
-    "Previous track.\nPress & hold to repeat this operation.",
-    "Next track.\nPress & hold to repeat this operation.",
+    "Previous track.",
+    "Next track.",
     "Stop Song.\nPress & hold with \"Restore Song\" to playing song from the current line.",
     "Restore Song.\nAfter, press & hold with \"Stop Song\" to playing song from the current line.",
     "On/off Edit Mode for Pattern Editor.",
@@ -1700,69 +1692,6 @@ local function akm_mp_dial()
               },
             }
           },
-          vb:horizontal_aligner{
-            mode="right",
-            width=310,
-            vb:row{
-              id="AKM_PN_UP_DOWN_1",
-              vb:text{
-                height=42,
-                width=37,
-                align="right",
-                font="bold",
-                text="Line"
-              },
-              vb:column{
-                spacing=-3,
-                vb:button{
-                  id="AKM_BTT_LIVE_1",
-                  active=false,
-                  height=26,
-                  width=29,
-                  bitmap="ico/arrow_up_ico.png",
-                  tooltip="Previous line.\nPress & hold to repeat this operation."
-                },
-                vb:button{
-                  id="AKM_BTT_LIVE_2",
-                  active=false,
-                  height=26,
-                  width=29,
-                  bitmap="ico/arrow_down_ico.png",
-                  tooltip="Next line.\nPress & hold to repeat this operation."
-                }
-              }
-            },
-            vb:row{
-              id="AKM_PN_UP_DOWN_2",
-              visible=false,
-              vb:text{
-                height=42,
-                width=37,
-                align="right",
-                font="bold",
-                text="Instr."
-              },
-              vb:column{
-                spacing=-3,
-                vb:button{
-                  id="AKM_BTT_BANK_1",
-                  active=false,
-                  height=26,
-                  width=29,
-                  bitmap="ico/arrow_up_ico.png",
-                  tooltip="Previous instrument.\nPress & hold to repeat this operation."
-                },
-                vb:button{
-                  id="AKM_BTT_BANK_2",
-                  active=false,
-                  height=26,
-                  width=29,
-                  bitmap="ico/arrow_down_ico.png",
-                  tooltip="Next instrument.\nPress & hold to repeat this operation."
-                }
-              }
-            }
-          }
         },
         akm_mp_daw()
       }
@@ -2803,11 +2732,15 @@ function akm_save_off()
   local filename=rna:prompt_for_filename_to_write("xrnx", "Save current Song as")
   if (filename=="") then
     vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[15]
-    return
   else
     rna:save_song_as(filename)
     vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[16]
   end
+  vws.AKM_BTT_DAW_A_6.color=AKM_CLR.MARKER
+  if (renoise.tool():has_timer(akm_gui_flash_save_dim)) then
+    renoise.tool():remove_timer(akm_gui_flash_save_dim)
+  end
+  renoise.tool():add_timer(akm_gui_flash_save_dim,300)
 end
 
 
@@ -2833,13 +2766,56 @@ function akm_undo()
 end
 
 
+-- Momentary "this fired" flash for one-shot GUI buttons (Save/Undo/Redo/Stop)
+-- that don't have an ongoing on/off state the way Play/Loop/Edit Mode do.
+-- Same self-removing-timer pattern as the TAP button's LED dim, just one
+-- callback per button since Renoise's timer API needs a stable function
+-- reference per timer.
+function akm_gui_flash_save_dim()
+  vws.AKM_BTT_DAW_A_6.color=AKM_CLR.DEFAULT
+  if (renoise.tool():has_timer(akm_gui_flash_save_dim)) then
+    renoise.tool():remove_timer(akm_gui_flash_save_dim)
+  end
+end
+
+function akm_gui_flash_undo_dim()
+  vws.AKM_BTT_DAW_A_7.color=AKM_CLR.DEFAULT
+  if (renoise.tool():has_timer(akm_gui_flash_undo_dim)) then
+    renoise.tool():remove_timer(akm_gui_flash_undo_dim)
+  end
+end
+
+function akm_gui_flash_redo_dim()
+  vws.AKM_BTT_DAW_A_8.color=AKM_CLR.DEFAULT
+  if (renoise.tool():has_timer(akm_gui_flash_redo_dim)) then
+    renoise.tool():remove_timer(akm_gui_flash_redo_dim)
+  end
+end
+
+function akm_gui_flash_stop_dim()
+  vws.AKM_BTT_DAW_B_3.color=AKM_CLR.DEFAULT
+  if (renoise.tool():has_timer(akm_gui_flash_stop_dim)) then
+    renoise.tool():remove_timer(akm_gui_flash_stop_dim)
+  end
+end
+
 function akm_song_undo()
   if (song.can_undo) then song:undo() end
+  vws.AKM_BTT_DAW_A_7.color=AKM_CLR.MARKER
+  if (renoise.tool():has_timer(akm_gui_flash_undo_dim)) then
+    renoise.tool():remove_timer(akm_gui_flash_undo_dim)
+  end
+  renoise.tool():add_timer(akm_gui_flash_undo_dim,300)
 end
 
 
 function akm_song_redo()
   if (song.can_redo) then song:redo() end
+  vws.AKM_BTT_DAW_A_8.color=AKM_CLR.MARKER
+  if (renoise.tool():has_timer(akm_gui_flash_redo_dim)) then
+    renoise.tool():remove_timer(akm_gui_flash_redo_dim)
+  end
+  renoise.tool():add_timer(akm_gui_flash_redo_dim,300)
 end
 
 
@@ -2851,6 +2827,11 @@ function akm_stop()
     vws.AKM_TXT_DIGITAL_1.text=akm_tbl_dm1[28]
     --print("panic")
   end
+  vws.AKM_BTT_DAW_B_3.color=AKM_CLR.MARKER
+  if (renoise.tool():has_timer(akm_gui_flash_stop_dim)) then
+    renoise.tool():remove_timer(akm_gui_flash_stop_dim)
+  end
+  renoise.tool():add_timer(akm_gui_flash_stop_dim,300)
 end
 
 
