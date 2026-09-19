@@ -20,11 +20,10 @@ KeyLab mk3 (49/61/88, no "Essential" in the name) — that hardware needs the or
 
 ## Installation
 
-1. Copy `main.lua` and the `lua/` folder into a tool directory named
-   `dev.foma.ArturiaKeyLabmk3.xrnx` inside your Renoise Tools folder
-   (`~/.config/Renoise/V3.5.x/Scripts/Tools/` on Linux).
-2. Restart Renoise.
-3. Open the tool from the **Tools** menu.
+1. You can either download the latest binary from this repo under **Releases**, or clone this repo and use the build.sh to create it.
+4. Drag and drop the .xrnx binary in Renoise
+3. Restart Renoise.
+4. Open the tool from the **Tools** menu.
 
 ## One-time setup
 

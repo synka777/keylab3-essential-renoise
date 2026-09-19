@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <RenoiseScriptingTool doc_version="0">
-  <Id>dev.foma.ArturiaKeyLabmk3</Id>
-  <Name>Arturia KeyLab mk3</Name>
+  <Id>dev.synka777.ArturiaKeyLabEssentialmk3</Id>
+  <Name>Arturia KeyLab Essential mk3</Name>
   <Version>1.0</Version>
-  <Description>Control and synchronize the Arturia KeyLab mk3 with Renoise.</Description>
+  <Description>Control and synchronize the Arturia KeyLab Esential mk3 with Renoise.</Description>
   <Author>foma</Author>
   <Category>MIDI,Control,Hardware</Category>
-  <Discussion>https://github.com/fomalsd/keylab3-renoise</Discussion>
+  <Discussion>https://github.com/synka777/keylab3-essential-renoise</Discussion>
   <ApiVersion>6</ApiVersion>
 </RenoiseScriptingTool>
