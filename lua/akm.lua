@@ -38,12 +38,15 @@
 --      limit until you reverse" behaviour - that's an accepted, understood
 --      limitation, not a bug to chase.
 --
--- 4) LED FEEDBACK (Play/Rec/Loop/Quant/Part/Tap) needs a one-time "DAW connect"
---    SysEx handshake before the device will accept LED colour commands at all
---    (akm_essential_daw_connect, sent automatically on first use). LEDs are
---    kept in sync via Renoise's *_observable properties (akm_essential_attach_led_observers),
---    not by only updating on button press - that way they stay correct even if
---    you change state with the mouse instead of the hardware.
+-- 4) LED FEEDBACK needs a one-time "DAW connect" SysEx handshake before the
+--    device will accept LED colour commands at all (akm_essential_daw_connect,
+--    sent automatically on first use). Only momentary flash-on-press exists
+--    now (Save/Undo/Redo/Stop/Tap) - persistent active/inactive tracking for
+--    Play/Rec/Loop/Quant/Part was tried and removed: the keyboard's own sleep
+--    mode resets all LEDs to 100% uniformly, which could leave those stuck
+--    showing the wrong state until the exact control was touched again, with
+--    no reliable fix found. Flash-on-press doesn't have that problem, since
+--    each flash self-corrects within 300-400ms regardless of prior state.
 --
 -- 5) Renoise's Lua sandbox caps a single chunk at 200 top-level locals. All
 --    action functions here are plain globals (no "local") specifically to stay
@@ -687,74 +690,15 @@ function akm_essential_set_led(button_id,r,g,b)
   end
 end
 
--- akm_essential_*_led_sync: one per LED-backed toggle (Play/Rec/Loop/Mixer).
--- These are attached as notifiers on the real Renoise property (see
--- akm_essential_attach_led_observers below) rather than only being called from
--- the button-press functions, so the LED stays correct even if the state
--- changes some other way (mouse, keyboard shortcut, song reaching that state
--- on its own).
-function akm_essential_play_led_sync()
-  if (song.transport.playing) then
-    akm_essential_set_led(0x15,0x00,0x7F,0x00)
-  else
-    akm_essential_set_led(0x15,0x00,0x18,0x00)
-  end
-end
-
-function akm_essential_edit_led_sync()
-  if (song.transport.edit_mode) then
-    akm_essential_set_led(0x16,0x7F,0x00,0x00)
-  else
-    akm_essential_set_led(0x16,0x18,0x00,0x00)
-  end
-end
-
-function akm_essential_loop_led_sync()
-  if (song.transport.loop_pattern) then
-    akm_essential_set_led(0x10,0x7F,0x7F,0x00)
-  else
-    akm_essential_set_led(0x10,0x18,0x18,0x00)
-  end
-end
-
-function akm_essential_mixer_led_sync()
-  local mfm=renoise.ApplicationWindow.MIDDLE_FRAME_MIXER
-  if (rna.window.active_middle_frame==mfm) then
-    akm_essential_set_led(0x07,0x7F,0x7F,0x7F)
-  else
-    akm_essential_set_led(0x07,0x18,0x18,0x18)
-  end
-end
-
--- Attaches the four LED-sync functions above as permanent notifiers on the
--- real Renoise properties. Called once at load and again on every new-song
--- event (see the app_new_document_observable hook further down) since a fresh
--- song document needs its own notifiers re-attached. Safe to call repeatedly -
--- has_notifier guards against attaching the same one twice.
-function akm_essential_attach_led_observers()
-  if (song and song.transport) then
-    if not (song.transport.playing_observable:has_notifier(akm_essential_play_led_sync)) then
-      song.transport.playing_observable:add_notifier(akm_essential_play_led_sync)
-    end
-    if not (song.transport.edit_mode_observable:has_notifier(akm_essential_edit_led_sync)) then
-      song.transport.edit_mode_observable:add_notifier(akm_essential_edit_led_sync)
-    end
-    if not (song.transport.loop_pattern_observable:has_notifier(akm_essential_loop_led_sync)) then
-      song.transport.loop_pattern_observable:add_notifier(akm_essential_loop_led_sync)
-    end
-  end
-  if (rna and rna.window and rna.window.active_middle_frame_observable) then
-    if not (rna.window.active_middle_frame_observable:has_notifier(akm_essential_mixer_led_sync)) then
-      rna.window.active_middle_frame_observable:add_notifier(akm_essential_mixer_led_sync)
-    end
-  end
-end
-
-rnt.app_new_document_observable:add_notifier(akm_essential_attach_led_observers)
-akm_essential_attach_led_observers()
-
-
-
+-- Persistent active/inactive LED tracking for Play/Record/Loop/Quant/Part was
+-- removed entirely: after the keyboard's own sleep mode resets all LEDs to a
+-- uniform 100% brightness, these could get stuck showing the wrong state
+-- (looking "off" while genuinely on, or vice versa) until the user happened
+-- to touch that exact control again - and no reliable way to detect or fix
+-- that was found (idle-detection resync and a keep-alive ping were both
+-- tried and abandoned). The momentary flash-on-press buttons (Save/Undo/Redo/
+-- Stop/Tap) don't have this problem, since each flash self-corrects within
+-- 300-400ms regardless of prior state, so those were kept.
 
 
 
@@ -917,8 +861,8 @@ local function akm_input_midi(in_device_name)
       --browses center controls, dial (instruments navigator) - press=CC117, turn=CC116
       if (message[1]==0xB0 and message[2]==117 and message[3]==0x7F) then return akm_button_dial_add_timer() end
       if (message[1]==0xB0 and message[2]==117 and message[3]==0x00) then return akm_button_dial_remove_timer() end
-      if (message[1]==0xB0 and message[2]==116 and message[3]>=0x41) then return akm_left_dial() end
-      if (message[1]==0xB0 and message[2]==116 and message[3]<=0x40) then return akm_right_dial() end
+      if (message[1]==0xB0 and message[2]==116 and message[3]>=0x41) then return akm_right_dial() end
+      if (message[1]==0xB0 and message[2]==116 and message[3]<=0x40) then return akm_left_dial() end
       
       --Essential mk3 knobs send ABSOLUTE 0-127 values (CC 96-104), not relative turns.
       --This tracks the last value per knob and derives a direction from it. Only
@@ -2991,14 +2935,6 @@ function akm_stop()
 end
 
 
-function akm_essential_quant_led_sync()
-  if (song.transport.record_quantize_enabled) then
-    akm_essential_set_led(0x0D,0x7F,0x7F,0x7F)
-  else
-    akm_essential_set_led(0x0D,0x10,0x10,0x10)
-  end
-end
-
 function akm_quantize()
   song.transport.record_quantize_enabled=not song.transport.record_quantize_enabled
   if (song.transport.record_quantize_enabled) then
@@ -3006,7 +2942,6 @@ function akm_quantize()
   else
     vws.AKM_TXT_DIGITAL_1.text="Quantize: OFF"
   end
-  akm_essential_quant_led_sync()
 end
 
 

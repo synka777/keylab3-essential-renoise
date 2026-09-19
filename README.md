@@ -121,13 +121,6 @@ controller. Pitch-bend needs a Pitch modulation entry on the instrument itself
 (Sampler → Modulation tab) to actually do anything — that's normal Renoise behaviour,
 unrelated to this tool.
 
-### Hardware LEDs
-
-Play, Record, Loop, Quantize, and Part light up to reflect their current state,
-staying in sync no matter how you changed that state (hardware button, mouse,
-keyboard shortcut). Tap Tempo's button brightens while you're actively tapping and
-dims out after a 2-second pause.
-
 ### On-screen GUI
 
 The tool's own dialog mirrors most of this: the same Play/Record/Loop/Metronome/Follow
@@ -146,7 +139,6 @@ intended way to drive everything.
   you'd expect if you're not also using the pads to play real notes at the same time.
 - The two Renoise settings in the setup steps above (ignore-controllers list,
   per-instrument channel) can't be set automatically by a Renoise Tool — that's a platform limitation, not something this tool chose not to do.
-- The buttons LED's backlighting state can be incoherent after the sleep/"Vegas" mode is triggered. One workaround fors Windows users would be to disable sleep mode for your MIDI keyboard with Arturia's software.
 
 ## Credits
 
