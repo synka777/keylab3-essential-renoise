@@ -4,7 +4,7 @@
   <Name>Arturia KeyLab Essential mk3</Name>
   <Version>1.0</Version>
   <Description>Control and synchronize the Arturia KeyLab Esential mk3 with Renoise.</Description>
-  <Author>foma</Author>
+  <Author>synka777</Author>
   <Category>MIDI,Control,Hardware</Category>
   <Discussion>https://github.com/synka777/keylab3-essential-renoise</Discussion>
   <ApiVersion>6</ApiVersion>
