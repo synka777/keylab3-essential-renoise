@@ -222,7 +222,7 @@ local function akm_capture_clr_mrk()
     filename=("%s/Library/Preferences/Renoise/V%s/Config.xml"):format(os.getenv("HOME"),rns_version)
     --print("MacOS:",filename)
   elseif (os.platform()=="LINUX") then
-    filename=("%s/.renoise/V%s/Config.xml"):format(os.getenv("HOME"),rns_version)
+    filename=("%s/.config/Renoise/V%s/Config.xml"):format(os.getenv("HOME"),rns_version)
     --print("Linux:",filename)
   end
   --print(filename)
@@ -234,7 +234,6 @@ local function akm_capture_clr_mrk()
   if (io.exists(filename)) then
     local pref_data=renoise.Document.create("RenoisePrefs"){SkinColors={Selected_Button_Back=""}}
     pref_data:load_from(filename)
-    --print(pref_data.SkinColors.Selected_Button_Back)
     local rgb=tostring(pref_data.SkinColors.Selected_Button_Back)
     local one,two,thr=rgb:match("([^,]+),([^,]+),([^,]+)")
     AKM_CLR.MARKER[1]=tonumber(one)
@@ -650,6 +649,34 @@ function akm_essential_daw_connect()
   end
 end
 
+-- Colours all 16 pad LEDs using Renoise's own current skin accent colour
+-- (AKM_CLR.MARKER, populated by akm_capture_clr_mrk from the user's real
+-- Config.xml - orange by default, whatever they've actually customised
+-- otherwise). Renoise stores that as 0-255 per channel; our hardware LED
+-- protocol wants 0-127, hence the halving. Pad LED ids run 0x1C-0x2B
+-- (16 consecutive ids) per the programming guide's table.
+function akm_essential_set_pad_leds_to_skin_color()
+  local r=math.floor((AKM_CLR.MARKER[1] or 235)/2)
+  local g=math.floor((AKM_CLR.MARKER[2] or 235)/2)
+  local b=math.floor((AKM_CLR.MARKER[3] or 235)/2)
+  for i=0,15 do
+    akm_essential_set_led(0x1C+i,r,g,b)
+  end
+end
+
+-- Pad LED reactivity (flash on press) was tried two ways - real press/release
+-- timing, then a fixed-delay timer - and both eventually caused the ALSA
+-- sequencer to flood with "Bad address"/"Invalid argument" errors during
+-- fast pad playing, badly enough that Renoise gave up logging them. Removed
+-- entirely rather than keep tuning the timing. Pads now only get the static
+-- skin-colour set once when the tool turns on (akm_essential_set_pad_leds_to_skin_color)
+-- and otherwise are untouched by anything LED-related.
+function akm_pad_led_on(pad_index)
+end
+
+function akm_pad_led_off(pad_index)
+end
+
 -- Sets one hardware button's LED to an RGB colour (0-0x7F per channel).
 -- button_id is the device's own LED-addressing id (NOT the CC number the
 -- button sends when pressed - those are two separate numbering schemes).
@@ -770,19 +797,96 @@ local function akm_input_midi(in_device_name)
       for i=1,#message do assert(message[i]>=0 and message[i]<=0xFF) end
 
       --- ---invoke commands
-      --pads (Essential mk3: note = 39+pad# on bank A, 47+pad# on bank B)
-      if (message[1]==0x99 and message[2]==40) then return akm_pad1() end
-      if (message[1]==0x99 and message[2]==41) then return akm_pad2() end
-      if (message[1]==0x99 and message[2]==42) then return akm_pad3() end
-      if (message[1]==0x99 and message[2]==43) then return akm_pad4() end
-      if (message[1]==0x99 and message[2]==44) then return akm_pad5() end
-      if (message[1]==0x99 and message[2]==45) then return akm_pad6() end
-      if (message[1]==0x99 and message[2]==46) then return akm_pad7() end
-      if (message[1]==0x99 and message[2]==47) then return akm_pad8() end
-      if (message[1]==0x99 and message[2]==48) then return akm_pad9() end
-      if (message[1]==0x99 and message[2]==49) then return akm_pad10() end
-      if (message[1]==0x99 and message[2]==50) then return akm_pad11() end
-      if (message[1]==0x99 and message[2]==51) then return akm_pad12() end
+      --pads (Essential mk3): Note-On on channel 11 (0x9A - NOT channel 10/0x99
+      --as tested much earlier in this project; confirmed via raw MIDI sniffing
+      --that the actual channel had shifted since). Real note layout isn't a
+      --simple contiguous range either - confirmed the same way. Bank A:
+      --pads 1-4 = notes 40-43, pads 5-8 = notes 36-39. Bank B: pads 1-4 =
+      --notes 48-51, pads 5-8 = notes 44-47. LED index (0-15) follows physical
+      --pad/bank position, not the note number itself.
+      --flash the pad's LED on press only - no other mapping, note passes
+      --through untouched to Renoise's own note input for sound.
+
+      if (message[1]==0x9A and message[2]==40) then
+        if (message[3]>0) then akm_pad_led_on(0) else akm_pad_led_off(0) end
+        return
+      end
+      if (message[1]==0x8A and message[2]==40) then akm_pad_led_off(0) return end
+      if (message[1]==0x9A and message[2]==41) then
+        if (message[3]>0) then akm_pad_led_on(1) else akm_pad_led_off(1) end
+        return
+      end
+      if (message[1]==0x8A and message[2]==41) then akm_pad_led_off(1) return end
+      if (message[1]==0x9A and message[2]==42) then
+        if (message[3]>0) then akm_pad_led_on(2) else akm_pad_led_off(2) end
+        return
+      end
+      if (message[1]==0x8A and message[2]==42) then akm_pad_led_off(2) return end
+      if (message[1]==0x9A and message[2]==43) then
+        if (message[3]>0) then akm_pad_led_on(3) else akm_pad_led_off(3) end
+        return
+      end
+      if (message[1]==0x8A and message[2]==43) then akm_pad_led_off(3) return end
+      if (message[1]==0x9A and message[2]==36) then
+        if (message[3]>0) then akm_pad_led_on(4) else akm_pad_led_off(4) end
+        return
+      end
+      if (message[1]==0x8A and message[2]==36) then akm_pad_led_off(4) return end
+      if (message[1]==0x9A and message[2]==37) then
+        if (message[3]>0) then akm_pad_led_on(5) else akm_pad_led_off(5) end
+        return
+      end
+      if (message[1]==0x8A and message[2]==37) then akm_pad_led_off(5) return end
+      if (message[1]==0x9A and message[2]==38) then
+        if (message[3]>0) then akm_pad_led_on(6) else akm_pad_led_off(6) end
+        return
+      end
+      if (message[1]==0x8A and message[2]==38) then akm_pad_led_off(6) return end
+      if (message[1]==0x9A and message[2]==39) then
+        if (message[3]>0) then akm_pad_led_on(7) else akm_pad_led_off(7) end
+        return
+      end
+      if (message[1]==0x8A and message[2]==39) then akm_pad_led_off(7) return end
+      if (message[1]==0x9A and message[2]==48) then
+        if (message[3]>0) then akm_pad_led_on(8) else akm_pad_led_off(8) end
+        return
+      end
+      if (message[1]==0x8A and message[2]==48) then akm_pad_led_off(8) return end
+      if (message[1]==0x9A and message[2]==49) then
+        if (message[3]>0) then akm_pad_led_on(9) else akm_pad_led_off(9) end
+        return
+      end
+      if (message[1]==0x8A and message[2]==49) then akm_pad_led_off(9) return end
+      if (message[1]==0x9A and message[2]==50) then
+        if (message[3]>0) then akm_pad_led_on(10) else akm_pad_led_off(10) end
+        return
+      end
+      if (message[1]==0x8A and message[2]==50) then akm_pad_led_off(10) return end
+      if (message[1]==0x9A and message[2]==51) then
+        if (message[3]>0) then akm_pad_led_on(11) else akm_pad_led_off(11) end
+        return
+      end
+      if (message[1]==0x8A and message[2]==51) then akm_pad_led_off(11) return end
+      if (message[1]==0x9A and message[2]==44) then
+        if (message[3]>0) then akm_pad_led_on(12) else akm_pad_led_off(12) end
+        return
+      end
+      if (message[1]==0x8A and message[2]==44) then akm_pad_led_off(12) return end
+      if (message[1]==0x9A and message[2]==45) then
+        if (message[3]>0) then akm_pad_led_on(13) else akm_pad_led_off(13) end
+        return
+      end
+      if (message[1]==0x8A and message[2]==45) then akm_pad_led_off(13) return end
+      if (message[1]==0x9A and message[2]==46) then
+        if (message[3]>0) then akm_pad_led_on(14) else akm_pad_led_off(14) end
+        return
+      end
+      if (message[1]==0x8A and message[2]==46) then akm_pad_led_off(14) return end
+      if (message[1]==0x9A and message[2]==47) then
+        if (message[3]>0) then akm_pad_led_on(15) else akm_pad_led_off(15) end
+        return
+      end
+      if (message[1]==0x8A and message[2]==47) then akm_pad_led_off(15) return end
 
       --play, record, loop (Essential mk3: plain CC, channel 1, 127=press/0=release)
       if (message[1]==0xB0 and message[2]==21 and message[3]==0x00) then return akm_play() end
@@ -1313,6 +1417,7 @@ function akm_on_off()
       vws.AKM_BT_ON_OFF.text="ON"
       vws.AKM_BT_ON_OFF.color=AKM_CLR.MARKER
       AKM_ON_OFF=true
+      akm_essential_set_pad_leds_to_skin_color()
     end
   end
 end
@@ -2322,6 +2427,37 @@ function akm_tap_led_dim_callback()
   end
 end
 
+-- Real hardware LED flash for the four one-shot action buttons, same
+-- self-removing-timer pattern as Tap. Button ids per the programming guide's
+-- table: Save=0x0C, Undo=0x0E, Redo=0x0F, Stop=0x14.
+function akm_led_flash_save_dim()
+  akm_essential_set_led(0x0C,0x18,0x18,0x18)
+  if (renoise.tool():has_timer(akm_led_flash_save_dim)) then
+    renoise.tool():remove_timer(akm_led_flash_save_dim)
+  end
+end
+
+function akm_led_flash_undo_dim()
+  akm_essential_set_led(0x0E,0x18,0x18,0x18)
+  if (renoise.tool():has_timer(akm_led_flash_undo_dim)) then
+    renoise.tool():remove_timer(akm_led_flash_undo_dim)
+  end
+end
+
+function akm_led_flash_redo_dim()
+  akm_essential_set_led(0x0F,0x18,0x18,0x18)
+  if (renoise.tool():has_timer(akm_led_flash_redo_dim)) then
+    renoise.tool():remove_timer(akm_led_flash_redo_dim)
+  end
+end
+
+function akm_led_flash_stop_dim()
+  akm_essential_set_led(0x14,0x18,0x18,0x18)
+  if (renoise.tool():has_timer(akm_led_flash_stop_dim)) then
+    renoise.tool():remove_timer(akm_led_flash_stop_dim)
+  end
+end
+
 
 -- Tap the button in rhythm to set song.transport.bpm. Averages the last 4
 -- gaps between taps (steadier than using only the single most recent gap),
@@ -2741,6 +2877,11 @@ function akm_save_off()
     renoise.tool():remove_timer(akm_gui_flash_save_dim)
   end
   renoise.tool():add_timer(akm_gui_flash_save_dim,300)
+  akm_essential_set_led(0x0C,0x7F,0x7F,0x7F)
+  if (renoise.tool():has_timer(akm_led_flash_save_dim)) then
+    renoise.tool():remove_timer(akm_led_flash_save_dim)
+  end
+  renoise.tool():add_timer(akm_led_flash_save_dim,300)
 end
 
 
@@ -2806,6 +2947,11 @@ function akm_song_undo()
     renoise.tool():remove_timer(akm_gui_flash_undo_dim)
   end
   renoise.tool():add_timer(akm_gui_flash_undo_dim,300)
+  akm_essential_set_led(0x0E,0x7F,0x7F,0x7F)
+  if (renoise.tool():has_timer(akm_led_flash_undo_dim)) then
+    renoise.tool():remove_timer(akm_led_flash_undo_dim)
+  end
+  renoise.tool():add_timer(akm_led_flash_undo_dim,300)
 end
 
 
@@ -2816,6 +2962,11 @@ function akm_song_redo()
     renoise.tool():remove_timer(akm_gui_flash_redo_dim)
   end
   renoise.tool():add_timer(akm_gui_flash_redo_dim,300)
+  akm_essential_set_led(0x0F,0x7F,0x7F,0x7F)
+  if (renoise.tool():has_timer(akm_led_flash_redo_dim)) then
+    renoise.tool():remove_timer(akm_led_flash_redo_dim)
+  end
+  renoise.tool():add_timer(akm_led_flash_redo_dim,300)
 end
 
 
@@ -2832,18 +2983,30 @@ function akm_stop()
     renoise.tool():remove_timer(akm_gui_flash_stop_dim)
   end
   renoise.tool():add_timer(akm_gui_flash_stop_dim,300)
+  akm_essential_set_led(0x14,0x7F,0x7F,0x7F)
+  if (renoise.tool():has_timer(akm_led_flash_stop_dim)) then
+    renoise.tool():remove_timer(akm_led_flash_stop_dim)
+  end
+  renoise.tool():add_timer(akm_led_flash_stop_dim,300)
 end
 
+
+function akm_essential_quant_led_sync()
+  if (song.transport.record_quantize_enabled) then
+    akm_essential_set_led(0x0D,0x7F,0x7F,0x7F)
+  else
+    akm_essential_set_led(0x0D,0x10,0x10,0x10)
+  end
+end
 
 function akm_quantize()
   song.transport.record_quantize_enabled=not song.transport.record_quantize_enabled
   if (song.transport.record_quantize_enabled) then
     vws.AKM_TXT_DIGITAL_1.text=("Quantize: ON (%d lines)"):format(song.transport.record_quantize_lines)
-    akm_essential_set_led(0x0D,0x7F,0x7F,0x7F)
   else
     vws.AKM_TXT_DIGITAL_1.text="Quantize: OFF"
-    akm_essential_set_led(0x0D,0x10,0x10,0x10)
   end
+  akm_essential_quant_led_sync()
 end
 
 

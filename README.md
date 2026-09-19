@@ -13,6 +13,8 @@ KeyLab mk3 (49/61/88, no "Essential" in the name) — that hardware needs the or
 - **Compatibility:** Renoise 3.5.x (Lua API 6)
 - **Hardware:** Arturia KeyLab Essential 49 / 61 / 88 mk3
 - **License:** GNU General Public License
+- **O/S used or testing:** Kubuntu 24.04
+- **Tested on hardware:** Arturia KeyLab Essential 61 mk3.
 
 ---
 
@@ -143,8 +145,8 @@ intended way to drive everything.
 - Play/Record/Loop/Part's on-screen sync (and pad-function firing) only tracks what
   you'd expect if you're not also using the pads to play real notes at the same time.
 - The two Renoise settings in the setup steps above (ignore-controllers list,
-  per-instrument channel) can't be set automatically by a Renoise Tool — that's a
-  platform limitation, not something this tool chose not to do.
+  per-instrument channel) can't be set automatically by a Renoise Tool — that's a platform limitation, not something this tool chose not to do.
+- The buttons LED's backlighting state can be incoherent after the sleep/"Vegas" mode is triggered. One workaround fors Windows users would be to disable sleep mode for your MIDI keyboard with Arturia's software.
 
 ## Credits
 
