@@ -1358,6 +1358,11 @@ function akm_on_off()
       akm_check_notifiers_on()
       akm_first_select_on()
       --akm_force_daw_mode()
+      --re-read the current skin colour every time the tool turns on, not just
+      --once ever - otherwise a skin change mid-session (no Renoise restart)
+      --leaves every AKM_CLR.MARKER-based colour (on-screen buttons, pad LEDs)
+      --stuck on whatever was captured the very first time the dialog was built.
+      akm_capture_clr_mrk()
       vws.AKM_BT_ON_OFF.text="ON"
       vws.AKM_BT_ON_OFF.color=AKM_CLR.MARKER
       AKM_ON_OFF=true
