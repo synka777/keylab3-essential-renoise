@@ -68,13 +68,17 @@
 -------------------------------------------------------------------------------------------------
 --persisted tool preferences (survives across Renoise sessions)
 renoise.tool().preferences = renoise.Document.create("AkmPreferences") {
-  essential_setup_shown=false,
-  default_device_index=5 --5 = "KeyLab Essential 61 mk3 (DAW)"
+  essential_setup_shown=false
   ,saved_in_device=""
   ,saved_out_device=""
+  ,sample_library_root=""
 }
 
 AKM_MAIN_DIALOG=nil
+AKM_SAMPLE_BROWSE_MODE=false
+AKM_SAMPLE_SUBFOLDERS={}
+AKM_SAMPLE_FILE_LIST={}
+AKM_SAMPLE_FILE_INDEX=0
 AKM_MAIN_CONTENT=nil
 akm_main_title="Arturia KeyLab mk3"
 akm_version="1.0"
@@ -116,7 +120,6 @@ song=nil
 
 
 --variables
-local AKM_DEVICE_NAME={" KeyLab 49 mk3 (DAW)"," KeyLab 61 mk3 (DAW)"," KeyLab 88 mk3 (DAW)"," KeyLab Essential 49 mk3 (DAW)"," KeyLab Essential 61 mk3 (DAW)"," KeyLab Essential 88 mk3 (DAW)"}
 local AKM_INPUTS={}
 local AKM_OUTPUTS={}
 local AKM_LOCK_IO_DEVICES=false
@@ -842,7 +845,7 @@ local function akm_input_midi(in_device_name)
       if (message[1]==0xB0 and message[2]==20 and message[3]==0x00) then return akm_stop() end
       if (message[1]==0xB0 and message[2]==23 and message[3]==0x7F) then return akm_tap_tempo() end
       if (message[1]==0xB0 and message[2]==41 and message[3]==0x00) then return akm_quantize() end
-      if (message[1]==0xB0 and message[2]==119 and message[3]==0x00) then return akm_toggle_mixer() end
+      if (message[1]==0xB0 and message[2]==119 and message[3]==0x00) then return akm_toggle_sample_browse_mode() end
       --Save button -> quick-save if the song already has a file, else prompt
       if (message[1]==0xB0 and message[2]==40 and message[3]==0x00) then
         if (song.file_name~=nil and song.file_name~="" and type(rna.save_song)=="function") then
@@ -861,8 +864,14 @@ local function akm_input_midi(in_device_name)
       --browses center controls, dial (instruments navigator) - press=CC117, turn=CC116
       if (message[1]==0xB0 and message[2]==117 and message[3]==0x7F) then return akm_button_dial_add_timer() end
       if (message[1]==0xB0 and message[2]==117 and message[3]==0x00) then return akm_button_dial_remove_timer() end
-      if (message[1]==0xB0 and message[2]==116 and message[3]>=0x41) then return akm_right_dial() end
-      if (message[1]==0xB0 and message[2]==116 and message[3]<=0x40) then return akm_left_dial() end
+      if (message[1]==0xB0 and message[2]==116 and message[3]>=0x41) then
+        if (AKM_SAMPLE_BROWSE_MODE) then return akm_sample_browse_next() end
+        return akm_right_dial()
+      end
+      if (message[1]==0xB0 and message[2]==116 and message[3]<=0x40) then
+        if (AKM_SAMPLE_BROWSE_MODE) then return akm_sample_browse_previous() end
+        return akm_left_dial()
+      end
       
       --Essential mk3 knobs send ABSOLUTE 0-127 values (CC 96-104), not relative turns.
       --This tracks the last value per knob and derives a direction from it. Only
@@ -1008,30 +1017,8 @@ end
 local function akm_check_midi_on()
   local function show_mess()
     AKM_ON_OFF=true akm_on_off()
-    if (vws.AKM_PP_DEVICE_NAME.value==1) then
-      return rna:show_warning("AKM: The in device \"KeyLab 49 mk3 (DAW)\" is not connected!\n\n"
-                            .."Do you have the \"KeyLab 49 mk3\" MIDI controller\nconnected correctly?")
-    end
-    if (vws.AKM_PP_DEVICE_NAME.value==2) then
-      return rna:show_warning("AKM: The in device \"KeyLab 61 mk3 (DAW)\" is not connected!\n\n"
-                            .."Do you have the \"KeyLab 61 mk3\" MIDI controller\nconnected correctly?")
-    end
-    if (vws.AKM_PP_DEVICE_NAME.value==3) then
-      return rna:show_warning("AKM: The in device \"KeyLab 88 mk3 (DAW)\" is not connected!\n\n"
-                            .."Do you have the \"KeyLab 88 mk3\" MIDI controller\nconnected correctly?")
-    end
-    if (vws.AKM_PP_DEVICE_NAME.value==4) then
-      return rna:show_warning("AKM: The in device \"KeyLab Essential 49 mk3 (DAW)\" is not connected!\n\n"
-                            .."Do you have the \"KeyLab Essential 49 mk3\" MIDI controller\nconnected correctly?")
-    end
-    if (vws.AKM_PP_DEVICE_NAME.value==5) then
-      return rna:show_warning("AKM: The in device \"KeyLab Essential 61 mk3 (DAW)\" is not connected!\n\n"
-                            .."Do you have the \"KeyLab Essential 61 mk3\" MIDI controller\nconnected correctly?")
-    end
-    if (vws.AKM_PP_DEVICE_NAME.value==6) then
-      return rna:show_warning("AKM: The in device \"KeyLab Essential 88 mk3 (DAW)\" is not connected!\n\n"
-                            .."Do you have the \"KeyLab Essential 88 mk3\" MIDI controller\nconnected correctly?")
-    end
+    return rna:show_warning("AKM: The in device is not connected!\n\n"
+                          .."Do you have your KeyLab Essential mk3 MIDI controller\nconnected correctly?")
   end
 
   local input_devices=renoise.Midi.available_input_devices()
@@ -1393,16 +1380,20 @@ end
 local AKM_SHOW_HIDE=true
 local function akm_show_hide()
   if (AKM_SHOW_HIDE) then
-    vws.AKM_ROW_TOP_1.visible=false
-    vws.AKM_ROW_TOP_2.visible=false
+    vws.AKM_PNL_TOP.visible=false
     vws.AKM_MAIN_PANELS.visible=false
+    vws.AKM_ROW_SAMPLE_ROOT.visible=false
+    vws.AKM_TXT_SAMPLE_FOLDER_SELECTED.width=360
+    akm_update_selected_folder_display()
     vws.AKM_BT_SHOW_HIDE.bitmap="ico/compact_off_ico.png"
     vws.AKM_BT_SHOW_HIDE.color=AKM_CLR.MARKER
     AKM_SHOW_HIDE=false  
   else
-    vws.AKM_ROW_TOP_1.visible=true
-    vws.AKM_ROW_TOP_2.visible=true
+    vws.AKM_PNL_TOP.visible=true
     vws.AKM_MAIN_PANELS.visible=true
+    vws.AKM_ROW_SAMPLE_ROOT.visible=true
+    vws.AKM_TXT_SAMPLE_FOLDER_SELECTED.width=140
+    akm_update_selected_folder_display()
     vws.AKM_BT_SHOW_HIDE.bitmap="ico/compact_on_ico.png"
     vws.AKM_BT_SHOW_HIDE.color=AKM_CLR.DEFAULT
     AKM_SHOW_HIDE=true
@@ -1427,95 +1418,155 @@ local function akm_upper_panel()
   local top_panel=vb:row{
     --margin=2,
     id="AKM_PNL_TOP",
-    vb:button{
-      id="AKM_BT_ON_OFF",
-      height=21,
-      width=37,
-      text="OFF",
-      notifier=function() akm_on_off() end,
-      tooltip="On/off to make a bridge between the selected device & Renoise."
-    },
-    vb:space{width=18},
-    vb:button{
-      id="AKM_BT_INJECT_TO_COPY",
-      height=21,
-      width=45,
-      bitmap="ico/patch_mappings_copy_ico.png",
-      notifier=function() patch_and_reload(true) end,
-      tooltip="Inject Pad MIDI mappings to a copy of this song with _keylab postfix."
-    },
-    vb:button{
-      id="AKM_BT_INJECT_HERE",
-      height=21,
-      width=45,
-      bitmap="ico/patch_mappings_ico.png",
-      notifier=function() patch_and_reload(false) end,
-      tooltip="Inject Pad MIDI mappings to this song and save"
-    },
-    vb:text{
-      height=21,
-      width=54,
-      align="right",
-      text="Name "
-    },
-    vb:popup{
-      id="AKM_PP_DEVICE_NAME",
-      height=21,
-      width=181,
-      value=renoise.tool().preferences.default_device_index.value,
-      items=AKM_DEVICE_NAME,
-      notifier=function(v)
-        renoise.tool().preferences.default_device_index.value=v
-        if (AKM_ON_OFF) then return akm_check_midi_off(), akm_check_midi_on() end
-      end,
-      tooltip="List of the names of supported devices. Your choice is remembered across restarts."
-    },
     vb:row{
-      id="AKM_ROW_TOP_1",
-      vb:text{
-        height=21,
-        width=71,
-        align="right",
-        font="bold",
-        text="In Device "
-      },
-      vb:popup{
-        id="AKM_PP_DEVICE_IN",
-        active=false,
-        height=21,
-        width=183,
-        value=1,
-        items=AKM_INPUTS,
-        notifier=function() if (AKM_ON_OFF) then return akm_check_midi_off(), akm_check_midi_on() end end,
-        tooltip="List of available in devices."
-      },
-      vb:text{
-        height=21,
-        width=81,
-        align="right",
-        font="bold",
-        text="Out Device "
-      },
-      vb:popup{
-        id="AKM_PP_DEVICE_OUT",
-        active=false,
-        height=21,
-        width=183,
-        value=1,
-        items=AKM_OUTPUTS,
-        notifier=function() if (AKM_ON_OFF) then return akm_check_midi_off(), akm_check_midi_on() end end,
-        tooltip="List of available out devices."
-      },
+      --Everything except the show/hide button itself lives in this one
+      --hide-able group now, so minimized view shows only the sample
+      --dropdown, its path display, and the show/hide button - nothing else.
+      id="AKM_ROW_TOP_MAIN",
       vb:button{
-        id="AKM_BT_LOCK_IO_DEVICES",
+        id="AKM_BT_ON_OFF",
         height=21,
         width=37,
-        bitmap="ico/padlock_close_ico.png",
-        color=AKM_CLR.MARKER,
-        notifier=function() akm_lock_io_devices() end,
-        tooltip="Lock/unlock the selection of in/out devices.\nAlways use the \"KeyLab mk3 (DAW)\" in this window.\n"..
-                "Do not use the the \"KeyLab mk3 (DAW)\" in:\nReniose: Edit / Preferences / MIDI: \"In device X...\" & \"Out device...\"."
+        text="OFF",
+        notifier=function() akm_on_off() end,
+        tooltip="On/off to make a bridge between the selected device & Renoise."
+      },
+      vb:space{width=18},
+      vb:button{
+        id="AKM_BT_INJECT_TO_COPY",
+        height=21,
+        width=45,
+        bitmap="ico/patch_mappings_copy_ico.png",
+        notifier=function() patch_and_reload(true) end,
+        tooltip="Inject Pad MIDI mappings to a copy of this song with _keylab postfix."
+      },
+      vb:button{
+        id="AKM_BT_INJECT_HERE",
+        height=21,
+        width=45,
+        bitmap="ico/patch_mappings_ico.png",
+        notifier=function() patch_and_reload(false) end,
+        tooltip="Inject Pad MIDI mappings to this song and save"
+      },
+      vb:row{
+        id="AKM_ROW_TOP_1",
+        vb:text{
+          height=21,
+          width=71,
+          align="right",
+          font="bold",
+          text="In Device "
+        },
+        vb:popup{
+          id="AKM_PP_DEVICE_IN",
+          active=false,
+          height=21,
+          width=183,
+          value=1,
+          items=AKM_INPUTS,
+          notifier=function() if (AKM_ON_OFF) then return akm_check_midi_off(), akm_check_midi_on() end end,
+          tooltip="List of available in devices."
+        },
+        vb:text{
+          height=21,
+          width=81,
+          align="right",
+          font="bold",
+          text="Out Device "
+        },
+        vb:popup{
+          id="AKM_PP_DEVICE_OUT",
+          active=false,
+          height=21,
+          width=183,
+          value=1,
+          items=AKM_OUTPUTS,
+          notifier=function() if (AKM_ON_OFF) then return akm_check_midi_off(), akm_check_midi_on() end end,
+          tooltip="List of available out devices."
+        },
+        vb:button{
+          id="AKM_BT_LOCK_IO_DEVICES",
+          height=21,
+          width=37,
+          bitmap="ico/padlock_close_ico.png",
+          color=AKM_CLR.MARKER,
+          notifier=function() akm_lock_io_devices() end,
+          tooltip="Lock/unlock the selection of in/out devices.\nAlways use the \"KeyLab mk3 (DAW)\" in this window.\n"..
+                  "Do not use the the \"KeyLab mk3 (DAW)\" in:\nReniose: Edit / Preferences / MIDI: \"In device X...\" & \"Out device...\"."
+        }
+      },
+      vb:row{
+        id="AKM_ROW_TOP_2",
+        vb:space{width=4},
+        vb:button{
+          id="AKM_BT_ABOUT",
+          height=21,
+          width=37,
+          bitmap="ico/question_ico.png",
+          notifier=function() akm_about() end,
+          tooltip=("Show/hide about %s info panel."):format(akm_main_title)
+        }
       }
+    }
+  }
+  --Own row, separate from the already-packed top_panel row above, so it has
+  --actual room instead of getting cropped/pushed off-screen. Deliberately
+  --NOT inside AKM_MAIN_PANELS, so it stays visible even when the tool is
+  --minimized via the show/hide button - this whole column is still returned
+  --directly into AKM_MAIN_CONTENT outside that hide-able group. The
+  --show/hide button itself lives on THIS row now (not top_panel), so
+  --minimized view collapses to one line - dropdown, path display, button -
+  --instead of two.
+  local sample_browser_row=vb:row{
+    id="AKM_ROW_SAMPLE_BROWSE",
+    vb:row{
+      --its own hide-able sub-group, separate from AKM_ROW_SAMPLE_BROWSE as a
+      --whole: hidden when minimized so the dropdown below can widen into the
+      --freed space and show longer relative paths more legibly. To change
+      --the root folder, maximize the tool, edit it, then minimize again.
+      id="AKM_ROW_SAMPLE_ROOT",
+      vb:text{
+        height=21,
+        width=56,
+        align="right",
+        text="Samples "
+      },
+      vb:textfield{
+        id="AKM_TXT_SAMPLE_ROOT",
+        height=21,
+        width=160,
+        value=renoise.tool().preferences.sample_library_root.value,
+        notifier=function(v)
+          renoise.tool().preferences.sample_library_root.value=v
+          akm_refresh_sample_folder_dropdown()
+        end,
+        tooltip="Root folder to browse for samples (e.g. your Renoise library path)."
+      }
+    },
+    vb:popup{
+      id="AKM_PP_SAMPLE_FOLDER",
+      height=21,
+      width=140,
+      items={"(set a root folder)"},
+      value=1,
+      notifier=function(v)
+        akm_load_sample_folder_files()
+        akm_update_selected_folder_display()
+      end,
+      tooltip="Subfolder to browse. Press Part to enable sample-browse mode, then turn the dial to load samples from this folder one at a time."
+    },
+    vb:text{
+      --the real "what's currently selected, at a glance" display: unlike the
+      --popup above (which truncates from the right when text is too long,
+      --cutting off the very thing that matters most - the deepest folder
+      --name), this truncates from the LEFT, keeping the end. Stays this
+      --purpose regardless of minimize state - only its width changes, to use
+      --the space freed when AKM_ROW_SAMPLE_ROOT hides.
+      id="AKM_TXT_SAMPLE_FOLDER_SELECTED",
+      height=21,
+      width=140,
+      align="left",
+      text=""
     },
     vb:button{
       id="AKM_BT_SHOW_HIDE",
@@ -1524,21 +1575,13 @@ local function akm_upper_panel()
       bitmap="ico/compact_on_ico.png",
       notifier=function() akm_show_hide() end,
       tooltip="Show/hide the controls."
-    },
-    vb:row{
-      id="AKM_ROW_TOP_2",
-      vb:space{width=4},
-      vb:button{
-        id="AKM_BT_ABOUT",
-        height=21,
-        width=37,
-        bitmap="ico/question_ico.png",
-        notifier=function() akm_about() end,
-        tooltip=("Show/hide about %s info panel."):format(akm_main_title)
-      }
     }
   }
-  return top_panel
+  return vb:column{
+    spacing=5,
+    top_panel,
+    sample_browser_row
+  }
 end
 
 
@@ -2290,6 +2333,7 @@ local function akm_main_dialog()
   if (AKM_MAIN_CONTENT==nil) then
     akm_capture_clr_mrk()
     akm_main_content()
+    akm_refresh_sample_folder_dropdown()
     require("lua/keyhandler")
   end
   --avoid showing the same window several times!
@@ -2755,6 +2799,9 @@ function akm_pad4() -- Toggle Pattern Advanced Edit
 end
 
 
+-- No longer wired to Part (replaced by sample-browse mode below) - left here
+-- intact in case you want to rebind it to one of the still-empty Bank B
+-- pad slots (5-8) later.
 function akm_toggle_mixer()
   local mfm=renoise.ApplicationWindow.MIDDLE_FRAME_MIXER
   local mfe=renoise.ApplicationWindow.MIDDLE_FRAME_PATTERN_EDITOR
@@ -2762,6 +2809,122 @@ function akm_toggle_mixer()
     rna.window.active_middle_frame=mfe
   else
     rna.window.active_middle_frame=mfm
+  end
+end
+
+-- Sample browser: Part toggles browse mode on/off; while on, the dial loads
+-- the next/previous sample file (from the folder picked in the dropdown)
+-- straight into the currently selected instrument via
+-- renoise.app():load_instrument_sample - live audition without loading isn't
+-- supported by the API ("Preloading/prehearing sample files is not
+-- supported via tools" per Renoise's own docs), so this loads immediately
+-- instead, which is still playable at any note right away.
+-- os.dirnames is a reasonable-confidence guess (same naming convention as
+-- the confirmed os.filenames) - if the subfolder dropdown stays empty, this
+-- is the most likely thing to check/correct first.
+-- Recursively walks every subfolder under root, collecting each one as a
+-- path relative to root (e.g. "Drums/Kicks/808"), not just root's immediate
+-- children. Depth-limited as a safety net against runaway recursion (a
+-- symlink loop, or accidentally pointing this at something enormous).
+function akm_scan_subfolders_recursive(absolute_path,relative_prefix,results,depth)
+  depth=depth or 0
+  if (depth>6) then return end
+  local ok,dirs=pcall(os.dirnames,absolute_path)
+  if not (ok and dirs) then return end
+  for _,d in ipairs(dirs) do
+    local rel=(relative_prefix=="") and d or (relative_prefix.."/"..d)
+    table.insert(results,rel)
+    akm_scan_subfolders_recursive(absolute_path.."/"..d,rel,results,depth+1)
+  end
+end
+
+-- Truncates from the LEFT (keeping the end), unlike a popup's own native
+-- truncation which cuts from the right - here the deepest, most specific
+-- folder name is what matters, not how close to the root it is.
+function akm_ellipsize_path(path,max_len)
+  if (#path<=max_len) then return path end
+  local keep=max_len-3
+  if (keep<1) then keep=1 end
+  return "..."..path:sub(#path-keep+1)
+end
+
+function akm_update_selected_folder_display()
+  if not (vws.AKM_TXT_SAMPLE_FOLDER_SELECTED) then return end
+  local selected=AKM_SAMPLE_SUBFOLDERS[vws.AKM_PP_SAMPLE_FOLDER and vws.AKM_PP_SAMPLE_FOLDER.value or 0]
+  local display_width=vws.AKM_TXT_SAMPLE_FOLDER_SELECTED.width
+  local max_chars=math.floor(display_width/6) --rough px-per-character estimate
+  vws.AKM_TXT_SAMPLE_FOLDER_SELECTED.text=selected and akm_ellipsize_path(selected,max_chars) or ""
+end
+
+function akm_refresh_sample_folder_dropdown()
+  local root=renoise.tool().preferences.sample_library_root.value
+  local subfolders={}
+  if (root~="" and io.exists(root)) then
+    akm_scan_subfolders_recursive(root,"",subfolders)
+  end
+  AKM_SAMPLE_SUBFOLDERS=subfolders
+  if (vws.AKM_PP_SAMPLE_FOLDER) then
+    if (#subfolders>0) then
+      vws.AKM_PP_SAMPLE_FOLDER.items=subfolders
+      vws.AKM_PP_SAMPLE_FOLDER.value=1
+    else
+      vws.AKM_PP_SAMPLE_FOLDER.items={"(no subfolders found)"}
+      vws.AKM_PP_SAMPLE_FOLDER.value=1
+    end
+  end
+  akm_update_selected_folder_display()
+  akm_load_sample_folder_files()
+end
+
+function akm_load_sample_folder_files()
+  AKM_SAMPLE_FILE_LIST={}
+  AKM_SAMPLE_FILE_INDEX=0
+  local root=renoise.tool().preferences.sample_library_root.value
+  if (root=="" or #AKM_SAMPLE_SUBFOLDERS==0 or not vws.AKM_PP_SAMPLE_FOLDER) then return end
+  local selected=AKM_SAMPLE_SUBFOLDERS[vws.AKM_PP_SAMPLE_FOLDER.value]
+  if (not selected) then return end
+  local full_path=root.."/"..selected
+  local ok,files=pcall(os.filenames,full_path,{"*.wav","*.aif","*.aiff","*.flac","*.ogg","*.mp3"})
+  if (ok and files) then
+    for _,f in ipairs(files) do
+      table.insert(AKM_SAMPLE_FILE_LIST,full_path.."/"..f)
+    end
+  end
+end
+
+function akm_sample_browse_load_current()
+  local filepath=AKM_SAMPLE_FILE_LIST[AKM_SAMPLE_FILE_INDEX]
+  if (filepath) then
+    rna:load_instrument_sample(filepath)
+    --full path everywhere this shows now (on-screen readout and status bar),
+    --not just the filename, so it's unambiguous which exact file/folder it
+    --came from.
+    vws.AKM_TXT_DIGITAL_2.text=filepath
+    rna:show_status(filepath)
+  end
+end
+
+function akm_sample_browse_next()
+  if (#AKM_SAMPLE_FILE_LIST==0) then return end
+  AKM_SAMPLE_FILE_INDEX=AKM_SAMPLE_FILE_INDEX+1
+  if (AKM_SAMPLE_FILE_INDEX>#AKM_SAMPLE_FILE_LIST) then AKM_SAMPLE_FILE_INDEX=1 end
+  akm_sample_browse_load_current()
+end
+
+function akm_sample_browse_previous()
+  if (#AKM_SAMPLE_FILE_LIST==0) then return end
+  AKM_SAMPLE_FILE_INDEX=AKM_SAMPLE_FILE_INDEX-1
+  if (AKM_SAMPLE_FILE_INDEX<1) then AKM_SAMPLE_FILE_INDEX=#AKM_SAMPLE_FILE_LIST end
+  akm_sample_browse_load_current()
+end
+
+function akm_toggle_sample_browse_mode()
+  AKM_SAMPLE_BROWSE_MODE=not AKM_SAMPLE_BROWSE_MODE
+  if (AKM_SAMPLE_BROWSE_MODE) then
+    akm_load_sample_folder_files()
+    vws.AKM_TXT_DIGITAL_1.text="Sample Browse: ON"
+  else
+    vws.AKM_TXT_DIGITAL_1.text="Sample Browse: OFF"
   end
 end
 

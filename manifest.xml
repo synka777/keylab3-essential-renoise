@@ -2,7 +2,7 @@
 <RenoiseScriptingTool doc_version="0">
   <Id>dev.synka777.ArturiaKeyLabEssentialmk3</Id>
   <Name>Arturia KeyLab Essential mk3</Name>
-  <Version>1.0a</Version>
+  <Version>1.1</Version>
   <Description>Control and synchronize the Arturia KeyLab Esential mk3 with Renoise.</Description>
   <Author>synka777</Author>
   <Category>MIDI,Control,Hardware</Category>

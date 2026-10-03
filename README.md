@@ -2,7 +2,7 @@
 
 A Renoise scripting tool that turns an **Arturia KeyLab Essential 49/61/88 mk3** into a
 hands-on control surface for Renoise: transport, pattern-editing knobs and faders,
-pads, tap tempo, and hardware LED feedback.
+pads, tap tempo, hardware LED feedback, and a dial-driven sample browser.
 
 This is a fork of the original [Arturia KeyLab mk3 tool](https://www.renoise.com/tools/arturia-keylab-mkii)
 by **foma** (itself based on the mkII tool by **ulneiz**), reworked specifically for the
@@ -13,15 +13,16 @@ KeyLab mk3 (49/61/88, no "Essential" in the name) — that hardware needs the or
 - **Compatibility:** Renoise 3.5.x (Lua API 6)
 - **Hardware:** Arturia KeyLab Essential 49 / 61 / 88 mk3
 - **License:** GNU General Public License
-- **O/S used or testing:** Kubuntu 24.04
-- **Tested on hardware:** Arturia KeyLab Essential 61 mk3.
+- **O/S used for testing:** Kubuntu 24.04
+- **Tested on hardware:** Arturia KeyLab Essential 61 mk3
 
 ---
 
 ## Installation
 
-1. You can either download the latest binary from this repo under **Releases**, or clone this repo and use the build.sh to create it.
-4. Drag and drop the .xrnx binary in Renoise
+1. You can either download the latest binary from this repo under **Releases**, or
+   clone this repo and use `build.sh` to create it.
+2. Drag and drop the `.xrnx` binary into Renoise.
 3. Restart Renoise.
 4. Open the tool from the **Tools** menu.
 
@@ -43,9 +44,6 @@ plain MIDI port — something like `KL Essential 61 mk3 MIDI`.
 > mk3's MCU/HUI port stays completely silent — all DAW control data (transport, knobs,
 > faders, dial) actually rides the plain MIDI port alongside your regular note input.
 
-Then pick your exact model (49/61/88 Essential) in the **Name** dropdown — this is
-remembered across restarts.
-
 ### 3. Tell Renoise to ignore the control-surface CCs
 
 Without this step, Renoise will record every button press and knob turn straight into
@@ -59,6 +57,21 @@ Go to **Edit → Preferences → MIDI**, find **"Ignore specific controllers"**,
 
 *(The tool also shows this exact box the first time you ever open it, so you don't have
 to come back here to find it.)*
+
+### 4. Restrict your instruments to MIDI channel 1 (optional, but recommended)
+
+Pads send on MIDI channel 11 — separate from your keys (channel 1) — but an
+instrument set to listen on **"Any"** channel will trigger from both. If you don't
+want pad hits to also play whatever instrument your keys are currently using,
+restrict that instrument's MIDI Input to channel 1 instead: **Instrument Editor →
+MIDI tab → Channel → 1**.
+
+### 5. Point the sample browser at your library (optional)
+
+If you want to use the dial-driven sample browser (see below), type a root folder
+path into the **Samples** field in the tool's dialog — your Renoise sample library, or
+any folder of your own. This is remembered across restarts. Everything else about the
+tool works fine without ever touching this.
 
 ---
 
@@ -77,8 +90,16 @@ to come back here to find it.)*
 | Save | Quick-saves if the song already has a filename; otherwise prompts for one |
 | `<<` / `>>` | Select previous / next track |
 | Quant | Toggles Renoise's global **Record Quantization** on/off |
-| Part | Toggles the **Mixer** view on/off (jumps back to the Pattern Editor) |
+| Part | Toggles **sample-browse mode** on/off (see below) |
 | Tap | Tap a steady rhythm (2+ taps) to set the song's BPM — averages your last 4 taps, resets if you pause more than 2 seconds |
+
+### Pads
+
+8 physical pads, 2 banks (switched with the **Bank** button) — 16 addressable slots.
+They work as regular notes, same as on any MIDI controller. The one thing this tool
+adds is their LED color: lit to match Renoise's current skin accent (orange by
+default), refreshed automatically every time you toggle the tool off and on — so if
+you change your Renoise theme, toggle off/on once to pick up the new color.
 
 ### Knobs 1–9 and Faders 1–9
 
@@ -108,8 +129,40 @@ All of this only does anything while **Edit Mode is on**.
 
 ### Dial
 
-Turn to navigate between Renoise's main panels (Pattern Editor, Mixer, etc.). Press
-and hold to jump straight to the Instrument editor.
+Turn to navigate between Renoise's main panels (Pattern Editor, Mixer, etc.) — turning
+right moves to the panel on the right, left to the one on the left. Press and hold to
+jump straight to the Instrument editor.
+
+While **sample-browse mode** is on (toggled with Part), the dial does something
+different instead — see the next section.
+
+### Sample browser
+
+A dial-driven way to audition and load sample files straight into your current
+instrument, without needing to load them manually first to hear how they sound across
+the keyboard.
+
+- **Samples field**: the root folder to browse (e.g. your Renoise library). Set once,
+  remembered across restarts.
+- **Folder dropdown**: every subfolder under that root, found recursively (not just
+  the root's immediate children), shown as a path relative to the root — e.g.
+  `Drums/Kicks/808`. Picking a folder here loads nothing by itself — it just prepares
+  that folder's file list. You need to actually turn the dial (with Part/sample-browse
+  mode on) to load its first sample.
+- **Part**: toggles sample-browse mode on/off. While on, the dial loads the
+  next/previous sample file from the selected folder straight into your current
+  instrument — immediately playable at any note, right on your actual keyboard.
+- **Path display**: next to the dropdown, shows whichever folder is currently
+  selected, truncated from the left if too long (so the deepest, most specific folder
+  name stays visible rather than the root-ward part). Widens automatically when the
+  tool is minimized.
+- Whenever a sample loads via the dial, its **full path** shows both in the tool's own
+  display and in Renoise's own status bar at the bottom of the main window — so you
+  always know exactly which file you're hearing.
+
+Live audio preview without loading isn't possible — Renoise's own API docs state
+plainly that prehearing sample files isn't supported via Tools — so this loads each
+one directly instead, which is still immediately playable at any note once loaded.
 
 ### Pitch wheel & mod wheel
 
@@ -120,13 +173,22 @@ controller. Pitch-bend needs a Pitch modulation entry on the instrument itself
 (Sampler → Modulation tab) to actually do anything — that's normal Renoise behaviour,
 unrelated to this tool.
 
+### Hardware LED feedback
+
+Save, Undo, Redo, Stop, and Tap flash briefly (bright, then back to dim) to confirm
+they fired. Play, Record, Loop, Quant, and Part deliberately have **no** persistent
+lit/unlit tracking — the keyboard's own sleep mode resets its LEDs in a way that made
+that unreliable (see Known limitations), so those just show whatever the hardware's
+own natural state is.
+
 ### On-screen GUI
 
-The tool's own dialog mirrors most of this: the same Play/Record/Loop/Metronome/Follow
-indicators light up on screen, and Save/Undo/Redo/Stop flash briefly to confirm they
-fired. These are status indicators, not clickable controls (aside from the
-Previous/Next Track buttons, which do work with the mouse) — the hardware is the
-intended way to drive everything.
+The tool's own dialog mirrors the momentary flashes (Save/Undo/Redo/Stop) and lets you
+minimize most of the interface down to just the sample browser — folder dropdown, path
+display, and the minimize/maximize button itself — via the button at the end of the
+Samples row. Previous/Next Track are the only on-screen buttons that are actually
+clickable with the mouse; everything else is a status display, not a control — the
+hardware is the intended way to drive everything.
 
 ---
 
@@ -134,10 +196,18 @@ intended way to drive everything.
 
 - Knobs 8 and 9 (relative-movement controls) can get stuck at their own physical
   0/127 limit until you turn back slightly — see above.
-- Play/Record/Loop/Part's on-screen sync (and pad-function firing) only tracks what
-  you'd expect if you're not also using the pads to play real notes at the same time.
+- Play/Record/Loop/Quant/Part have no persistent lit/unlit LED tracking (see Hardware
+  LED feedback above) — a deliberate trade-off for stability, not an oversight.
+- The keyboard's own sleep ("Vegas") mode resets its LED brightness inconsistently on
+  wake. No reliable software fix was found for this — Renoise Tools can't read an
+  LED's current state back from the device, can't detect a sleep/wake event, and can't
+  disable Vegas Mode itself via script. If it bothers you, it can be disabled through
+  Arturia's own MIDI Control Center on Windows/Mac (not confirmed 100% reliable even
+  there, per user reports).
+- No live audio preview for the sample browser — see that section above.
 - The two Renoise settings in the setup steps above (ignore-controllers list,
-  per-instrument channel) can't be set automatically by a Renoise Tool — that's a platform limitation, not something this tool chose not to do.
+  per-instrument channel) can't be set automatically by a Renoise Tool — that's a
+  platform limitation, not something this tool chose not to do.
 
 ## Credits
 
