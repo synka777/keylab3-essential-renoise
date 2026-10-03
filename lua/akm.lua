@@ -2896,10 +2896,11 @@ function akm_sample_browse_load_current()
   local filepath=AKM_SAMPLE_FILE_LIST[AKM_SAMPLE_FILE_INDEX]
   if (filepath) then
     rna:load_instrument_sample(filepath)
-    --full path everywhere this shows now (on-screen readout and status bar),
-    --not just the filename, so it's unambiguous which exact file/folder it
-    --came from.
-    vws.AKM_TXT_DIGITAL_2.text=filepath
+    --Deliberately not writing anything to the on-screen readout here - even
+    --filename-only still triggered the same width/resize issue, so whatever
+    --causes it isn't actually about text length (both attempts assumed it
+    --was, and both still showed the problem). Not chasing it further - the
+    --status bar notification below already covers this information.
     rna:show_status(filepath)
   end
 end
