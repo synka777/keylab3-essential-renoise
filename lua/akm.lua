@@ -2886,6 +2886,10 @@ function akm_load_sample_folder_files()
   local full_path=root.."/"..selected
   local ok,files=pcall(os.filenames,full_path,{"*.wav","*.aif","*.aiff","*.flac","*.ogg","*.mp3"})
   if (ok and files) then
+    --os.filenames returns files in whatever order the filesystem gives them,
+    --which looks random while browsing with the dial. Sorted
+    --case-insensitively so "Kick" and "kick" don't get split apart.
+    table.sort(files,function(a,b) return a:lower()<b:lower() end)
     for _,f in ipairs(files) do
       table.insert(AKM_SAMPLE_FILE_LIST,full_path.."/"..f)
     end
